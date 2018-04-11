@@ -1,6 +1,6 @@
 NAME: Feilan Wang
 EMAIL: wangfeilan@hotmail.com
-ID: 104796844
+ID: 
 
 Description of the included files:
 lab0.c - a single C source module that compiles cleanly (with gcc, with no errors or warnings). The program copies its standard input to its standard output.
