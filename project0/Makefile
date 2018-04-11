@@ -83,11 +83,11 @@ check: lab0
 
 
 dist: 
-	tar -czvf lab0-104796844.tar.gz lab0.c Makefile README backtrace.png breakpoint.png
+	tar -czvf lab0-XXXXXXXXX.tar.gz lab0.c Makefile README backtrace.png breakpoint.png
 
 #This prevents make from getting confused by an actual file called clean
 #and causes it to continue in spite of errors from rm.
 .PHONY : clean
 clean:
-	-rm -f test* lab0 lab0-104796844.tar.gz
+	-rm -f test* lab0 lab0-XXXXXXXXX.tar.gz
 	#'-' means ignores the return status
