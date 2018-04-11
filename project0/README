@@ -1,0 +1,23 @@
+NAME: Feilan Wang
+EMAIL: wangfeilan@hotmail.com
+ID: 104796844
+
+Description of the included files:
+lab0.c - a single C source module that compiles cleanly (with gcc, with no errors or warnings). The program copies its standard input to its standard output.
+Makefile - to build the program and the tarball.
+backtrace.png - showing a segfault and associated stack-trace.
+breakpoint.png - showing a breakpoint and variable inspection.
+README - this file.
+
+Description of the smoke-test cases in check:
+1. Test if the program detect and report invalid arguments.
+2. Test if the program detect and report non-existent file.
+3. Test if the program is able to read from stdin and write to stdout.
+4. Test if the program outputs correct content.
+5. Test if the program is able to read from --input=filename and write to --output=filename.
+6. Test if the program is able to cause segmentation fault.
+7. Test if the program is able to catch segmentation fault.
+
+References:
+1. test script provided by web.cs.ucla.edu/classes/spring18/cs111/projects/P0_check.sh
+2. GNU websites. 
