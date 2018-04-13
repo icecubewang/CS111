@@ -10,20 +10,25 @@
 
 static struct termios terminal_old;
 static struct termios terminal_new;
+//Put keyboard (the file open on fd0) into terminal
+int terminal_descriptor = 0;
 
 //In non-canonical mode, input is not assembled into lines and input processing does not occur.
 //c_cc[VTIME] (character timer) and c_cc[VMIN] (minimum number of characteres to receive before satsfying the read) controls the behaviour of this mode.
 
+//Reset Input mode
+void reset_input_mode(void) {
+	tcsetattr(terminal_descriptor, TCSANOW, &terminal_old);	//Restore
+}
+
 int main(int argc, char *argv[]) {
-		int res;
+	int res;
 	char buf[255];
-	
-	//Put keyboard (the file open on fd0) into terminal
-	int terminal_descriptor = 0;
 
 	//Obtain terminal settings (save current port setting)
 	if (tcgetattr(terminal_descriptor, &terminal_old))
 		return errno = ENOTSUP;	//ENOTSUP == operation not supported.
+	atexit(reset_input_mode);
 
 	//Erase the data in terminal_new
 	bzero(&terminal_new, sizeof(terminal_new));
@@ -40,12 +45,19 @@ int main(int argc, char *argv[]) {
 	tcflush(terminal_descriptor, TCIFLUSH);
 	tcsetattr(terminal_descriptor, TCSANOW, &terminal_new);	//TCSANOW: make the change immediately
 
-	while (buf[0] != '\004') {	//'\004' == Ctrl-D (need to include stdlib.h)
-		res = read(terminal_descriptor, buf, 255);
-		buf[res] = 0;
-		printf("%s\r\n", buf);
-	}
+	do {
+		res = read(terminal_descriptor, &buf, 255);
+		if (buf[0] == '\r' || buf[0] == '\n') {	//'\013' == /r and '\010' == /n
+			buf[0] = '\r';
+			buf[1] = '\n';
+			buf[2] = 0;
+			write(1, &buf, res+1);
+		} 
+		else {
+			buf[res] = 0;
+			write(1, &buf, res);
+		}
+	} while (buf[0] != '\004');	//'\004' == Ctrl-D (need to include stdlib.h)
 
-	tcsetattr(terminal_descriptor, TCSANOW, &terminal_old);	//Restore
 	return 0;
 }
