@@ -10,11 +10,16 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <sys/poll.h>
+#include <sys/wait.h>
 
 static struct termios terminal_old;
 static struct termios terminal_new;
 //Put keyboard (the file open on fd0) into terminal
 int terminal_descriptor = 0;
+bool debug = false;
+bool shell = false;
+pid_t pid;	//child's pid
+int status = 0;
 
 //In non-canonical mode, input is not assembled into lines and input processing does not occur.
 //c_cc[VTIME] (character timer) and c_cc[VMIN] (minimum number of characteres to receive before satsfying the read) controls the behaviour of this mode.
@@ -22,6 +27,10 @@ int terminal_descriptor = 0;
 /* Reset Input mode */
 void reset_input_mode(void) {
 	tcsetattr(terminal_descriptor, TCSANOW, &terminal_old);	//Restore
+	if (shell) {
+		waitpid(pid, &status, 0);
+		fprintf(stderr, "SHELL EXIT SIGNAL=%d STATUS=%d\n", WTERMSIG(status), WEXITSTATUS(status));
+	}
 }
 
 /* Initialize a new terminal */
@@ -40,16 +49,21 @@ void init_terminal(void) {
 
 	tcflush(terminal_descriptor, TCIFLUSH);						//tcflush() discards data written to the object referred to by fd but not transmitted,
 																//or data received but not read, depending on the value of queue_selector
-	tcsetattr(terminal_descriptor, TCSANOW, &terminal_new);		//TCSANOW: make the change immediately
+	tcsetattr(terminal_descriptor, TCSANOW, &terminal_new);	//TCSANOW: make the change immediately
 }
 
+/* Signal Handler */
+void sighandler(int signal) {
+	if (signal == SIGPIPE) {
+		if (debug) printf("Received sigpipe.\n");
+		exit(0);
+	}
+}
 
 int main(int argc, char *argv[]) {
 
 	/* Parse arguments */
 	int c;
-	bool shell = false;
-	bool debug = false;
 	struct option long_options[] = {
 		{"shell", no_argument, 0, 's'},
 		{"debug", no_argument, 0, 'd'},
@@ -65,6 +79,8 @@ int main(int argc, char *argv[]) {
 				debug = true;
 				break;
 			default:
+				fprintf(stderr, "Usage: ./lab1a OR ./lab1a --shell.\nDo not enter anything else.\n");
+				exit(1);
 				break;
 		}
 	}
@@ -75,42 +91,58 @@ int main(int argc, char *argv[]) {
 		/* NON-SHELL MODE */
 		int res = 0;
 		char buf[256];
-		do {
+		while(1) {
 			res = read(terminal_descriptor, &buf, 256);
 			if (res < 0) {
-				fprintf(stderr, "Error: Read in non-shell mode. \n");
+				fprintf(stderr, "Error: During Read in non-shell mode.\n");
+				exit(1);
 			}
-			if (buf[0] == '\r' || buf[0] == '\n') {	//'\013' == /r and '\010' == /n
-				buf[0] = '\r';
-				buf[1] = '\n';
-				write(1, &buf, res+1);
-			} 
-			else {
-				write(1, &buf, res);
+			for (int i = 0; i < res; i++) {
+				if (buf[i] == '\004') {		//'\004' == Ctrl-D (need to include stdlib.h)
+					char* terminate = "^D";
+					if (write(1, terminate, 2) < 0) {
+						fprintf(stderr, "Error: During Write in non-shell mode.\n");
+						exit(1);
+					}
+					exit(0);
+				}
+				if (buf[i] == '\r' || buf[i] == '\n') {
+					char* crlf = "\r\n";
+					if (write(1, crlf, 2) < 0) {
+						fprintf(stderr, "Error: During Write in non-shell mode.\n");
+						exit(1);
+					}
+				}
+				else {
+					if (write(1, &buf[i], 1) < 0) {
+						fprintf(stderr, "Error: During Write in non-shell mode.\n");
+						exit(1);
+					}
+				}
 			}
-		} while (buf[0] != '\004');	//'\004' == Ctrl-D (need to include stdlib.h)
+		}
 	}
 	else {
 		/* SHELL MODE */
+		signal(SIGPIPE, sighandler);
 
 		/* Declare vairables */
 		char buf_p[256];
 		char buf_c[256];
-		pid_t pid;	//child's pid
 		int pipe_in[2];
 		int pipe_out[2];
 
 		/* Create the pipe */
 		if (pipe(pipe_in) || pipe(pipe_out)) {
 			fprintf(stderr, "Error: Building pipe failed.\n");
-			exit(-1);
+			exit(1);
 		}
 
 		/* Fork process */
 		pid = fork();
 		if (pid == -1) {
 			printf("Error: Folk.\n");
-			exit(-1);
+			exit(1);
 		}
 		
 		/* CHILD PROCESS */
@@ -118,31 +150,31 @@ int main(int argc, char *argv[]) {
 
 			if (close(pipe_in[0]) < 0) {
 				fprintf(stderr, "Error: Close pipe_in[0].\n");
-				exit(-1);
+				exit(1);
 			}
 			if (close(pipe_out[1]) < 0) {
 				fprintf(stderr, "Error: Close pipe_out[1].\n");
-				exit(-1);
+				exit(1);
 			}
 			if (dup2(pipe_in[1], STDERR_FILENO) < 0) {
 				fprintf(stderr, "Error: dup2.\n");
-				exit(-1);
+				exit(1);
 			}
 			if (dup2(pipe_in[1], STDOUT_FILENO) < 0) {
 				fprintf(stderr, "Error: dup2.\n");
-				exit(-1);
+				exit(1);
 			}
 			if (dup2(pipe_out[0], STDIN_FILENO) < 0) {
 				fprintf(stderr, "Error: dup2.\n");
-				exit(-1);
+				exit(1);
 			}
 			if (close(pipe_in[1]) < 0) {
 				fprintf(stderr, "Error: Close pipe_in[1].\n");
-				exit(-1);
+				exit(1);
 			}
 			if (close(pipe_out[0]) < 0) {
 				fprintf(stderr, "Error: Close pipe_in[1].\n");
-				exit(-1);
+				exit(1);
 			}
 
 			char* execvp_argv[2];
@@ -151,7 +183,7 @@ int main(int argc, char *argv[]) {
 			execvp_argv[1] = NULL;
 			if (execvp(execvp_filename, execvp_argv) < 0) {
 				fprintf(stderr, "Error: Exec /bin/bash.\n");
-				exit(-1);
+				exit(1);
 			}
 		}
 		/* PARENT PROCESS */
@@ -159,210 +191,148 @@ int main(int argc, char *argv[]) {
 
 			if (close(pipe_in[1]) < 0) {
 				fprintf(stderr, "Error: Close pipe_in[1].\n");
-				exit(-1);
+				exit(1);
 			}
 			if (close(pipe_out[0]) < 0) {
 				fprintf(stderr, "Error: Close pipe_out[0].\n");
-				exit(-1);
+				exit(1);
 			}
 
 			struct pollfd pfds[2];
 			/* pfds[0] is keyboard stdin */
 			pfds[0].fd = terminal_descriptor;
-			pfds[0].events = POLLIN | POLLHUP | POLLERR;
+			pfds[0].events = POLLIN;
 			/* pfds[1] is output return from shell */
 			pfds[1].fd = pipe_in[0];
 			pfds[1].events = POLLIN | POLLHUP | POLLERR;
 			while (1) {
 				if (poll(pfds, 2, 0) < 0) {
 					fprintf(stderr, "Error: poll() failed.\n");
+					exit(1);
 				}
 				if (pfds[0].revents & (POLLIN | POLLHUP | POLLERR)) {
 					int count = 0;
 					count = read(terminal_descriptor, &buf_p, 256);
+					if (count < 0) {
+						fprintf(stderr, "Error: During Read in shell mode.\n");
+						exit(1);
+					}
 					for (int i = 0; i < count; i++) {
+						if (buf_p[i] == '\003') {
+							char* interrupt = "^C";
+							if (write(1, interrupt, 2) < 0) {
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
+							kill(pid, SIGINT);
+							exit(0);
+						}
 						if (buf_p[i] == '\004') {
-							close(pipe_in[0]);
-							exit(1);
+							char* terminate = "^D";
+							if (write(1, terminate, 2) < 0) {
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
+							// if (write(pipe_out[1], &buf_p[i], 1) < 0) {
+							// 	fprintf(stderr, "Error: During Write in shell mode.\n");
+							// 	exit(1);
+							// }
+							if (close(pipe_out[1]) < 0) {
+								fprintf(stderr, "Error: Close pipe_out[1].\n");
+								exit(1);
+							}
+							//Do last read from shell
+							int count = 0;
+							count = read(pipe_in[0], &buf_c, 256);
+							if (count < 0) {
+								fprintf(stderr, "Error: During Read in shell mode. \n");
+								exit(1);
+							}
+							for (int i = 0; i < count; i++) {
+								if (buf_c[i] == '\n') {
+									char* crlf = "\r\n";
+									if (write(1, crlf, 2) < 0) {
+										fprintf(stderr, "Error: During Write in shell mode.\n");
+										exit(1);
+									}
+								}
+								if (buf_c[i] == '\004') {
+									if (close(pipe_in[1] < 0)) {
+										fprintf(stderr, "Error: Close pipe_in[1].\n");
+									}
+								}
+								else {
+									if (write(1, &buf_c[i], 1) < 0) {
+										fprintf(stderr, "Error: During Write in shell mode.\n");
+										exit(1);
+									}
+								}
+							}
+							// waitpid(pid, &status, 0);
+							// fprintf(stderr, "SHELL EXIT SIGNAL=%d STATUS=%d\n", WTERMSIG(status), WEXITSTATUS(status));
+							exit(0);
 						}
 						if (buf_p[i] == '\r' || buf_p[i] == '\n') {
 							char* crlf = "\r\n";
 							char lf = '\n';
-							write(1, crlf, 2);					//echo to stdout
-							write(pipe_out[1], &lf, 1);			//go to shell
+							if (write(1, crlf, 2) < 0) {					//echo to stdout
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
+							if (write(pipe_out[1], &lf, 1) < 0) {			//go to shell
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
 						}
 						else {
-							write(1, &buf_p[i], 1);				//echo to stdout
-							write(pipe_out[1], &buf_p[i], 1);	//go to shell
+							if (write(1, &buf_p[i], 1) < 0) {				//echo to stdout
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
+							if (write(pipe_out[1], &buf_p[i], 1) < 0) {	//go to shell
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
 						}
 					}
 				}
-				if (pfds[1].revents & (POLLIN | POLLHUP | POLLERR)) {
+				if (pfds[1].revents & POLLIN) {
 					int count = 0;
-					if (debug) {
-						printf("shell output \n");
-					}
 					count = read(pipe_in[0], &buf_c, 256);
+					if (count < 0) {
+						fprintf(stderr, "Error: During Read in shell mode. \n");
+						exit(1);
+					}
 					for (int i = 0; i < count; i++) {
 						if (buf_c[i] == '\n') {
 							char* crlf = "\r\n";
-							write(1, crlf, 2);
+							if (write(1, crlf, 2) < 0) {
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
+						}
+						if (buf_c[i] == '\004') {
+							if (close(pipe_in[1] < 0)) {
+								fprintf(stderr, "Error: Close pipe_in[1].\n");
+							}
 						}
 						else {
-							write(1, &buf_c[i], 1);
+							if (write(1, &buf_c[i], 1) < 0) {
+								fprintf(stderr, "Error: During Write in shell mode.\n");
+								exit(1);
+							}
 						}
 					}
 				}
+				if (pfds[1].revents & (POLLHUP | POLLERR)) {
+					if (close(pipe_out[1]) < 0) {
+						fprintf(stderr, "Error: Close pipe_out[1].\n");
+						exit(1);
+					}
+				}
 			}
-
-
-		// 	pfds[0].fd = terminal_descriptor;
-		// 	pfds[0].events = POLLIN | POLLHUP | POLLERR;
-		// 	pfds[1].fd = pipe_in[0];
-		// 	pfds[1].events = POLLIN | POLLHUP | POLLERR;
-		// 	poll(pfds, 2, 0);
-
-			// do {
-			// 	int count = 0;
-			// 	count = read(terminal_descriptor, &buf_p, 256);
-			// 	if (buf_p[0] == '\r' || buf_p[0] == '\n') {	//'\013' == /r and '\010' == /n
-			// 		buf_p[0] = '\r';
-			// 		buf_p[1] = '\n';
-			// 		buf_p[2] = 0;
-			// 		write(1, &buf_p, count+1);
-			// 		//Forward it to the shell
-			// 		write(pipe_out[1], &buf_p[1], count);
-			// 		read(pipe_out[0], &buf_p[1], count);
-			// 		read(pipe_in[0], &buf_c[1], count);
-			// 		write(1, &buf_c, count+1);
-			// 	} 
-			// 	else {
-			// 		buf_p[count] = 0;
-			// 		write(1, &buf_p, count);
-			// 		//Forward it to the shell
-			// 		write(pipe_out[1], &buf_p, count);
-			// 		read(pipe_out[0], &buf_p, count);
-			// 		read(pipe_in[0], &buf_c, count);
-			// 		write(1, &buf_c, count);
-			// 	}
-			// } while (buf_p[0] != '\004');	//'\004' == Ctrl-D (need to include stdlib.h)
 		}
-
-				// int readcount = 0;
-				// readcount = read(terminal_descriptor, &buf_p, 256);
-				// for (int i = 0; i < readcount; i++) {
-				// 	printf("reading\r\n");
-				// 	if (buf_p[i] == '\004')
-				// 		exit(0);
-				// 	else if (buf_p[i] == '\r' || buf_p[i] == '\n') {
-				// 		char* crlf = "\r\n";
-				// 		char lf = '\n';
-				// 		write(1, crlf, 2);
-				// 		write(pipe_out[1], &lf, 1);
-				// 		read(pipe_out[0], &lf, 1);
-				// 	}
-				// 	else {
-				// 		printf("before write\r\n");
-				// 		write(1, &buf_p[i], 1);
-				// 		printf("after write to screen \r\n");
-				// 		write(pipe_out[1], &buf_p[i], 1);
-				// 		printf("after write to pipe \r\n");
-				// 		read(pipe_out[0], &buf_p[i], 1);
-				// 		printf("after write\r\n");
-				// 	}
-				// }
-
-				// printf("out of first loop \r\n");
-				// readcount = read(pipe_in[0], &buf_c, 256);
-				// printf("readcount = %d\r\n", readcount);
-
-				// for (int i = 0; i < readcount; i++) {
-				// 	if (buf_c[i] == '\n') {
-				// 		char* crlf = "\r\n";
-				// 		write(1, crlf, 2);
-				// 	}
-				// 	else {
-				// 		write(1, &buf_c[i], 1);
-				// 	}
-				// }
-				// printf("after writing from shell\r\n");
-
-
-
-
-			// 	if (buf_p[0] == '\r' || buf_p[0] == '\n') {	//'\013' == /r and '\010' == /n
-			// 		buf_p[0] = '\r';
-			// 		buf_p[1] = '\n';
-			// 		buf_p[2] = 0;
-			// 		write(1, &buf_p, count+1);
-			// 		//Forward it to the shell
-			// 		write(pipe_out[1], &buf_p[1], count);
-			// 		read(pipe_out[0], &buf_p[1], count);
-			// 		read(pipe_in[0], &buf_c[1], count);
-			// 		write(1, &buf_c, count+1);
-			// 	} 
-			// 	else {
-			// 		buf_p[count] = 0;
-			// 		write(1, &buf_p, count);
-			// 		//Forward it to the shell
-			// 		write(pipe_out[1], &buf_p, count);
-			// 		read(pipe_out[0], &buf_p, count);
-			// 		read(pipe_in[0], &buf_c, count);
-			// 		write(1, &buf_c, count);
-			// 	}
-			// } while (buf_p[0] != '\004');	//'\004' == Ctrl-D (need to include stdlib.h)
-		
-		// struct pollfd pfds[2];
-
-		// while(1) {
-		// 	pfds[0].fd = terminal_descriptor;
-		// 	pfds[0].events = POLLIN | POLLHUP | POLLERR;
-		// 	pfds[1].fd = pipe_in[0];
-		// 	pfds[1].events = POLLIN | POLLHUP | POLLERR;
-		// 	poll(pfds, 2, -1);
-		// 	if (pfds[0].revents & (POLLIN | POLLHUP | POLLERR)) {
-		// 		do {
-		// 			int count = 0;
-		// 			count = read(terminal_descriptor, &buf_p, 256);
-		// 			if (buf_p[0] == '\r' || buf_p[0] == '\n') {	//'\013' == /r and '\010' == /n
-		// 				buf_p[0] = '\r';
-		// 				buf_p[1] = '\n';
-		// 				buf_p[2] = 0;
-		// 				write(1, &buf_p, count+1);
-		// 				//Forward it to the shell
-		// 				write(pipe_out[1], &buf_p[1], count);
-		// 				read(pipe_out[0], &buf_p[1], count);
-		// 				// read(pipe_in[1], &buf_c[1], count);
-		// 				// write(1, &buf_c, count+1);
-		// 			} 
-		// 			else {
-		// 				buf_p[count] = 0;
-		// 				write(1, &buf_p, count);
-		// 				//Forward it to the shell
-		// 				write(pipe_out[1], &buf_p, count);
-		// 				read(pipe_out[0], &buf_p, count);
-		// 				// read(pipe_in[1], &buf_c, count);
-		// 				// write(1, &buf_c, count);
-		// 			}
-		// 		} while (buf_p[0] != '\004');	//'\004' == Ctrl-D (need to include stdlib.h)
-
-		// 	}
-		// 	if (pfds[1].revents & (POLLIN | POLLHUP | POLLERR)) {
-		// 		do {
-		// 			int count = 0;
-		// 			count = read(pipe_in[1], &buf_c, count);
-		// 			for (int i = 0; i < count; i++) {
-		// 				if (buf_c[i] == '\n') {
-		// 					char* temp = "\r\n";
-		// 					write(1, &temp, 2);
-		// 				} 
-		// 				else {
-		// 					write(1, &buf_c, 1);
-		// 				}
-		// 			}
-		// 		} while(buf_c[0] != '\004');
-		// 	}
-		// }
+		exit(0);
 	}
 
 	exit(0);
