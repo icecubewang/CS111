@@ -1,0 +1,15 @@
+NAME: Feilan Wang
+EMAIL: wangfeilan@hotmail.com
+ID: 104796844
+SLIPDAYS: 104796844, 1
+
+Description of the included files:
+lab1a.c - a single C source module that compiles cleanly (with no errors or warnings). It runs under two modes: without --shell and with --shell.
+	Without --shell: it simply prints whatever the user types. ^D to exit.
+	With --shell: it runs shell commands. ^D to exit. ^C to kill. 
+Makefile - to build the program.
+README - this file.
+
+References:
+1. test script provided by https://web.cs.ucla.edu/classes/spring18/cs111/projects/P1A_check.sh
+2. GNU website. 
