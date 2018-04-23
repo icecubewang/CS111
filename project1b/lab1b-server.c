@@ -1,0 +1,320 @@
+/* SERVER */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <string.h>
+#include <getopt.h>
+#include <poll.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+
+int pipe_in[2];
+int pipe_out[2];
+char buffer[1024];
+int status = 0;
+pid_t pid;
+
+/* Signal handler */
+void sighandler(int sig) {
+	if (sig == SIGPIPE) {
+		char *errmsg = "Error: Caught SIGPIPE with swignal number. \r\n";
+		write(2, errmsg, strlen(errmsg));
+		_exit(0);
+	}
+}
+
+/* Reset function */
+void reset(void) {
+	//Do last read from shell
+	int bytes_read = 0;
+	bytes_read = read(pipe_in[0], &buffer, 1024);
+	if (bytes_read < 0) {
+		fprintf(stderr, "Error during read.\r\n");
+		exit(1);
+	}
+	for (int i = 0; i < bytes_read; i++) {
+		if (buffer[i] == '\n') {
+			char* crlf = "\r\n";
+			if (write(1, crlf, 2) < 0) {
+				fprintf(stderr, "Error during read.\r\n");
+				exit(1);
+			}
+		}
+		else {
+			if (write(1, &buffer[i], 1) < 0) {
+				fprintf(stderr, "Error during read.\r\n");
+				exit(1);
+			}
+		}
+	}
+	//Message
+	if (waitpid(pid, &status, 0) < 0) {
+		fprintf(stderr, "Error: with waitpid. %s\r\n", strerror(errno));
+		exit(1);
+	}
+	int p_status = 0;
+	int p_signal = 0;
+
+	if (WIFEXITED(status)) {
+		p_status = WEXITSTATUS(status);
+	}
+	if (WIFSIGNALED(status)) {
+		p_signal = WTERMSIG(status);
+	}
+	fprintf(stderr, "SHELL EXIT SIGNAL=%d, STATUS=%d\r\n", p_signal, p_status);
+}
+
+int main(int argc, char* argv[]) {
+	/* Call reset before exit */
+	atexit(reset);
+	/* Start: Parse arguments */
+	bool port = false;
+	int portValue;
+	bool compress = false;
+	bool debug = false;
+	int c;
+	struct option long_options[] = {
+		{"port",		required_argument,	0,	'p'},
+		{"compress",	no_argument,		0,	'c'},
+		{"debug",		no_argument,		0,	'd'},
+		{0,	0,	0,	0}
+	};
+	int option_index = 0;
+	while((c = getopt_long(argc, argv, "cp:l:", long_options, &option_index)) != -1) {
+		switch(c) {
+			case 'd':
+				debug = true;
+				break;
+			case 'p':
+				port = true;
+				portValue = atoi(optarg);
+				if (portValue <= 1024 || portValue >= 66535) {
+					fprintf(stderr, "Port numbers should be between 1024 and 65535.\n");
+					exit(1);
+				}
+				if (debug) {
+					printf("Port ? %d, string = %d\n", port, portValue);
+				}
+				break;
+			case'c':
+				compress = true;
+				break;
+			default:
+				fprintf(stderr, "Usage: ./lab1b-client --port=[enter] --compress\n");
+				exit(1);
+		}
+	}
+	if (!port) {
+		fprintf(stderr, "--port= is mandatory.\n");
+		exit(1);
+	}
+	/* End: Parse arguments */
+
+	/* Start: Insert signal handler */
+	if (signal(SIGPIPE, sighandler) == SIG_ERR) {
+		fprintf(stderr, "Error with signal.\r\n");
+		exit(1);
+	}
+	/* End: Insert signal handler */
+
+	/* Start: Set up socket connection */
+	int sockfd, newsockfd, clilen;
+	struct sockaddr_in serv_addr, cli_addr;
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd < 0) {
+		fprintf(stderr, "Error opending socket.\n");
+		exit(1);
+	}
+	memset((char*) &serv_addr, 0, sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_port = htons(portValue);
+	if (bind(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0) {
+		fprintf(stderr, "Error on binding.\n");
+		exit(1);
+	}
+	listen(sockfd, 1);
+	clilen = sizeof(cli_addr);
+	newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);
+	if (newsockfd < 0) {
+		fprintf(stderr, "Error on accept.\n");
+		exit(1);
+	}
+	/* End: Set up socket connection */
+
+	/* Start: Pipe construction */
+	if (pipe(pipe_in) == -1 || (pipe(pipe_out) == -1)) {
+		fprintf(stderr, "Error building pipes.\n");
+		exit(1);
+	}
+	/* End: Pipe construction */
+
+	/* Start: Fork a child process */
+	pid = fork();
+	if (pid == -1) {
+		fprintf(stderr, "Error during fork.\n");
+		exit(1);
+	}
+	/* End: Fork a child process */
+
+	/* Start: Child process */
+	else if (pid == 0) {
+		/* Start: Pipe handling in child process */
+		if (close(pipe_in[0]) < 0) {
+			fprintf(stderr, "Error closing pipe.\n");
+			exit(1);
+		}
+		if (close(pipe_out[1]) < 0) {
+			fprintf(stderr, "Error closing pipe.\n");
+			exit(1);
+		}
+		if (dup2(pipe_out[0], STDIN_FILENO) < 0) {
+			fprintf(stderr, "Error: dup2. %s\r\n", strerror(errno));
+			exit(1);
+		}
+		if (dup2(pipe_in[1], STDOUT_FILENO) < 0) {
+			fprintf(stderr, "Error: dup2. %s\r\n", strerror(errno));
+			exit(1);
+		}
+		if (dup2(pipe_in[1], STDERR_FILENO) < 0) {
+			fprintf(stderr, "Error: dup2. %s\r\n", strerror(errno));
+			exit(1);
+		}
+		if (close(pipe_in[1]) < 0) {
+			fprintf(stderr, "Error closing pipe.\n");
+			exit(1);
+		}
+		if (close(pipe_out[0]) < 0) {
+			fprintf(stderr, "Error closing pipe.\n");
+			exit(1);
+		}
+		/* End: Pipe handling in child process */
+
+		/* Start: Run exec() */
+		char* execvp_argv[2];
+		char execvp_filename[] = "/bin/bash";
+		execvp_argv[0] = execvp_filename;
+		execvp_argv[1] = NULL;
+		if (execvp(execvp_filename, execvp_argv) < 0) {
+			fprintf(stderr, "Error: Exec /bin/bash. %s\r\n", strerror(errno));
+			exit(1);
+		}
+		/* End: Run exec() */
+	}
+	/* End: Child process */
+
+	/* Start: Parent process */
+	else {
+		/* Start: Pipe handling in parent process */
+		if (close(pipe_in[1]) < 0) {
+			fprintf(stderr, "Error: Close pipe_in[1]. %s\r\n", strerror(errno));
+			exit(1);
+		}
+		if (close(pipe_out[0]) < 0) {
+			fprintf(stderr, "Error: Close pipe_out[0]. %s\r\n", strerror(errno));
+			exit(1);
+		}
+		/* End: Pipe handling in parent process */
+
+		/* Start: Construct poll */
+		struct pollfd pfds[2];
+		pfds[0].fd = newsockfd;
+		pfds[0].events = POLLIN;
+		pfds[1].fd = pipe_in[0];
+		pfds[1].events = POLLIN;
+		/* End: Construct poll */
+
+		while(1) {
+			int p = poll(pfds, 2, -1);
+			if (p < 0) {
+				fprintf(stderr, "Error during poll.\n");
+				exit(1);
+			}
+			if (p == 0) {
+				continue;
+			}
+
+			char buffer[1024];
+			int bytes_read = 0;
+
+			/* Start: Send input from socket to shell */
+			if (pfds[0].revents & POLLIN) {
+				bytes_read = read(newsockfd, &buffer, 1024);
+				if (bytes_read < 0) {
+					fprintf(stderr, "Error during read.\n");
+					exit(1);
+				}
+				for (int i = 0; i < bytes_read; i++) {
+					if (buffer[i] == '\004') {
+						if (close(pipe_out[1]) < 0) {
+							fprintf(stderr, "Error during write.\n");
+							exit(1);
+						}
+						exit(0);
+					}
+					else if (buffer[i] == '\003') {
+						if (kill(pid, SIGINT) < 0) {
+							fprintf(stderr, "Error during kill.\n");
+							exit(1);
+						}
+						if (write(pipe_out[1], "\n", 1) < 0) {
+							fprintf(stderr, "Error during write.\n");
+							exit(1);
+						}
+					}
+					else if (buffer[i] == '\r' || buffer[i] == '\n') {
+						char lf = '\n';
+						if (write(pipe_out[1], &lf, 1) < 0) {
+							fprintf(stderr, "Error during write.\n");
+							exit(1);
+						}
+					}
+					else {
+						if (write(pipe_out[1], &buffer[i], 1) < 0) {
+							fprintf(stderr, "Error during write.\n");
+							exit(1);
+						}
+					}
+				}
+			}
+			/* End: Send input to shell */
+
+			/* Start: Send input from shell to socket */
+			if (pfds[1].revents & POLLIN) {
+				bytes_read = read(pipe_in[0], &buffer, 1024);
+				if (bytes_read < 0) {
+					fprintf(stderr, "Error during read.\n");
+					exit(1);
+				}
+				for (int i = 0; i < bytes_read; i++) {
+					if (write(newsockfd, &buffer[i], 1) < 0) {
+						fprintf(stderr, "Error during write.\n");
+						exit(1);
+					}
+				}
+			}
+			/* End: Send input from shell to socket */
+
+			/* Start: POLLHUP & POLLERR case */
+			if ((pfds[0].revents & POLLHUP) || (pfds[0].revents & POLLERR)) {
+				if (close(pipe_out[1]) < 0) {
+					fprintf(stderr, "Error closing pipe.\n");
+					exit(1);
+				}
+				exit(0);
+			}
+			if ((pfds[1].revents & POLLHUP) || (pfds[1].revents & POLLERR)) {
+				exit(0);
+			}
+			/* End: POLLHUP & POLLERR case */
+		}
+	}
+}
