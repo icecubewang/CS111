@@ -1,5 +1,5 @@
 /* SERVER */
-
+#define _POSIX_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -15,12 +15,18 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <zlib.h>
 
 int pipe_in[2];
 int pipe_out[2];
-char buffer[1024];
+char buffer[2048];
 int status = 0;
 pid_t pid;
+bool bogus = false;
+bool compressFlag = false;
+
+z_stream shell_to_client;
+z_stream client_to_shell;
 
 /* Signal handler */
 void sighandler(int sig) {
@@ -33,43 +39,49 @@ void sighandler(int sig) {
 
 /* Reset function */
 void reset(void) {
+	if (compressFlag) {
+		deflateEnd(&shell_to_client);
+		inflateEnd(&client_to_shell);
+	}
 	//Do last read from shell
-	int bytes_read = 0;
-	bytes_read = read(pipe_in[0], &buffer, 1024);
-	if (bytes_read < 0) {
-		fprintf(stderr, "Error during read.\r\n");
-		exit(1);
-	}
-	for (int i = 0; i < bytes_read; i++) {
-		if (buffer[i] == '\n') {
-			char* crlf = "\r\n";
-			if (write(1, crlf, 2) < 0) {
-				fprintf(stderr, "Error during read.\r\n");
-				exit(1);
+	if (!bogus) {
+		int bytes_read = 0;
+		bytes_read = read(pipe_in[0], &buffer, 2048);
+		if (bytes_read < 0) {
+			fprintf(stderr, "Error during read.\r\n");
+			exit(1);
+		}
+		for (int i = 0; i < bytes_read; i++) {
+			if (buffer[i] == '\n') {
+				char* crlf = "\r\n";
+				if (write(1, crlf, 2) < 0) {
+					fprintf(stderr, "Error during read.\r\n");
+					exit(1);
+				}
+			}
+			else {
+				if (write(1, &buffer[i], 1) < 0) {
+					fprintf(stderr, "Error during read.\r\n");
+					exit(1);
+				}
 			}
 		}
-		else {
-			if (write(1, &buffer[i], 1) < 0) {
-				fprintf(stderr, "Error during read.\r\n");
-				exit(1);
-			}
+		//Message
+		if (waitpid(pid, &status, 0) < 0) {
+			fprintf(stderr, "Error: with waitpid. %s\r\n", strerror(errno));
+			exit(1);
 		}
-	}
-	//Message
-	if (waitpid(pid, &status, 0) < 0) {
-		fprintf(stderr, "Error: with waitpid. %s\r\n", strerror(errno));
-		exit(1);
-	}
-	int p_status = 0;
-	int p_signal = 0;
+		int p_status = 0;
+		int p_signal = 0;
 
-	if (WIFEXITED(status)) {
-		p_status = WEXITSTATUS(status);
+		if (WIFEXITED(status)) {
+			p_status = WEXITSTATUS(status);
+		}
+		if (WIFSIGNALED(status)) {
+			p_signal = WTERMSIG(status);
+		}
+		fprintf(stderr, "SHELL EXIT SIGNAL=%d, STATUS=%d\r\n", p_signal, p_status);
 	}
-	if (WIFSIGNALED(status)) {
-		p_signal = WTERMSIG(status);
-	}
-	fprintf(stderr, "SHELL EXIT SIGNAL=%d, STATUS=%d\r\n", p_signal, p_status);
 }
 
 int main(int argc, char* argv[]) {
@@ -78,7 +90,6 @@ int main(int argc, char* argv[]) {
 	/* Start: Parse arguments */
 	bool port = false;
 	int portValue;
-	bool compress = false;
 	bool debug = false;
 	int c;
 	struct option long_options[] = {
@@ -96,8 +107,8 @@ int main(int argc, char* argv[]) {
 			case 'p':
 				port = true;
 				portValue = atoi(optarg);
-				if (portValue <= 1024 || portValue >= 66535) {
-					fprintf(stderr, "Port numbers should be between 1024 and 65535.\n");
+				if (portValue <= 2048 || portValue >= 66535) {
+					fprintf(stderr, "Port numbers should be between 2048 and 65535.\n");
 					exit(1);
 				}
 				if (debug) {
@@ -105,10 +116,31 @@ int main(int argc, char* argv[]) {
 				}
 				break;
 			case'c':
-				compress = true;
+				compressFlag = true;
+				/* Start: Compression stuff */
+
+				shell_to_client.zalloc = Z_NULL;
+				shell_to_client.zfree = Z_NULL;
+				shell_to_client.opaque = Z_NULL;
+
+				if (deflateInit(&shell_to_client, Z_DEFAULT_COMPRESSION) < 0) {
+					fprintf(stderr, "Error during deflateInit.\r\n");
+					exit(1);
+				}
+
+				client_to_shell.zalloc = Z_NULL;
+				client_to_shell.zfree = Z_NULL;
+				client_to_shell.opaque = Z_NULL;
+
+				if (inflateInit(&client_to_shell) < 0) {
+					fprintf(stderr, "Error during inflateInit.\r\n");
+					exit(1);
+				}
+				/* End: Compression stuff */
 				break;
 			default:
-				fprintf(stderr, "Usage: ./lab1b-client --port=[enter] --compress\n");
+				fprintf(stderr, "Usage: ./lab1b-server --port=[enter] --compress\r\n");
+				bogus = true;
 				exit(1);
 		}
 	}
@@ -126,7 +158,8 @@ int main(int argc, char* argv[]) {
 	/* End: Insert signal handler */
 
 	/* Start: Set up socket connection */
-	int sockfd, newsockfd, clilen;
+	int sockfd, newsockfd;
+	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
@@ -148,6 +181,7 @@ int main(int argc, char* argv[]) {
 		fprintf(stderr, "Error on accept.\n");
 		exit(1);
 	}
+	if (debug) printf("Connected.\r\n");
 	/* End: Set up socket connection */
 
 	/* Start: Pipe construction */
@@ -242,17 +276,35 @@ int main(int argc, char* argv[]) {
 				continue;
 			}
 
-			char buffer[1024];
+			char buffer[2048];
 			int bytes_read = 0;
 
 			/* Start: Send input from socket to shell */
 			if (pfds[0].revents & POLLIN) {
-				bytes_read = read(newsockfd, &buffer, 1024);
+				bytes_read = read(newsockfd, &buffer, 2048);
 				if (bytes_read < 0) {
 					fprintf(stderr, "Error during read.\n");
 					exit(1);
 				}
-				for (int i = 0; i < bytes_read; i++) {
+
+				/* Decompression */
+				int new_bytes_read = bytes_read;
+				if (compressFlag) {
+					char decompress_buffer[2048];
+					memset(decompress_buffer, 0, sizeof(char) * 2048);
+					memcpy(decompress_buffer, buffer, bytes_read);
+					memset(buffer, 0, 2048);
+					client_to_shell.avail_in = bytes_read;
+					client_to_shell.next_in = (Bytef *) decompress_buffer;
+					client_to_shell.avail_out = 2048;
+					client_to_shell.next_out = (Bytef *) buffer;
+					do {
+						inflate(&client_to_shell, Z_SYNC_FLUSH);
+					} while (client_to_shell.avail_in > 0);
+					new_bytes_read = 2048 - client_to_shell.avail_out;
+				}
+
+				for (int i = 0; i < new_bytes_read; i++) {
 					if (buffer[i] == '\004') {
 						if (close(pipe_out[1]) < 0) {
 							fprintf(stderr, "Error during write.\n");
@@ -289,15 +341,31 @@ int main(int argc, char* argv[]) {
 
 			/* Start: Send input from shell to socket */
 			if (pfds[1].revents & POLLIN) {
-				bytes_read = read(pipe_in[0], &buffer, 1024);
+				bytes_read = read(pipe_in[0], &buffer, 2048);
 				if (bytes_read < 0) {
 					fprintf(stderr, "Error during read.\n");
 					exit(1);
 				}
-				for (int i = 0; i < bytes_read; i++) {
-					if (write(newsockfd, &buffer[i], 1) < 0) {
-						fprintf(stderr, "Error during write.\n");
-						exit(1);
+
+				/* Compression */
+				if (compressFlag) {
+					char compress_buffer[2048];
+					memset(compress_buffer, 0, sizeof(char) * 2048);
+					shell_to_client.avail_in = bytes_read;
+					shell_to_client.next_in = (Bytef *) buffer;
+					shell_to_client.avail_out = 2048;
+					shell_to_client.next_out = (Bytef *) compress_buffer;
+					do {
+						deflate(&shell_to_client, Z_SYNC_FLUSH);
+					} while (shell_to_client.avail_in > 0);
+					write(newsockfd, compress_buffer, 2048 - shell_to_client.avail_out);
+				}
+				else {
+					for (int i = 0; i < bytes_read; i++) {
+						if (write(newsockfd, &buffer[i], 1) < 0) {
+							fprintf(stderr, "Error during write.\n");
+							exit(1);
+						}
 					}
 				}
 			}
@@ -312,6 +380,10 @@ int main(int argc, char* argv[]) {
 				exit(0);
 			}
 			if ((pfds[1].revents & POLLHUP) || (pfds[1].revents & POLLERR)) {
+				if (close(pipe_out[1]) < 0) {
+					fprintf(stderr, "Error closing pipe.\n");
+					exit(1);
+				}
 				exit(0);
 			}
 			/* End: POLLHUP & POLLERR case */
