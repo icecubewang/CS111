@@ -1,3 +1,9 @@
+/*
+NAME: Feilan Wang
+EMAIL: wangfeilan@hotmail.com
+ID: 104796844
+*/
+
 /* CLIENT */
 
 #include <stdio.h>
@@ -34,7 +40,10 @@ static struct termios terminal_new;
 void sighandler(int sig) {
 	if (sig == SIGPIPE) {
 		char *errmsg = "Error: Caught SIGPIPE with swignal number. \r\n";
-		write(2, errmsg, strlen(errmsg));
+		if (write(2, errmsg, strlen(errmsg)) < 0) {
+			fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
+			exit(1);
+		}
 		_exit(0);
 	}
 }
@@ -51,7 +60,7 @@ void reset_input_mode(void) {
 void init_terminal(void) {
 
 	if (!isatty(0)) {
-		fprintf(stderr, "Error: Not a terminal.\r\n");
+		fprintf(stderr, "Error: Not a terminal. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	tcgetattr(STDIN_FILENO, &terminal_old);				//Obtain terminal settings (save current port setting)
@@ -93,7 +102,7 @@ int main(int argc, char* argv[]) {
 				port = true;
 				portValue = atoi(optarg);
 				if (portValue <= 2048 || portValue >= 66535) {
-					fprintf(stderr, "Port numbers should be between 2048 and 65535.\n");
+					fprintf(stderr, "Port numbers should be between 2048 and 65535. \r\n");
 					exit(1);
 				}
 				if (debug) {
@@ -103,7 +112,7 @@ int main(int argc, char* argv[]) {
 			case 'l':
 				log = true;
 				if (strcmp("", optarg) == 0) {
-					fprintf(stderr, "Please input a filename for log.\r\n");
+					fprintf(stderr, "Please input a filename for log. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				logString = optarg;
@@ -122,7 +131,7 @@ int main(int argc, char* argv[]) {
 				stdin_to_shell.opaque = Z_NULL;
 
 				if (deflateInit(&stdin_to_shell, Z_DEFAULT_COMPRESSION) < 0) {
-					fprintf(stderr, "Error during deflateInit.\r\n");
+					fprintf(stderr, "Error during deflateInit. %s\r\n", strerror(errno));
 					exit(1);
 				}
 
@@ -131,7 +140,7 @@ int main(int argc, char* argv[]) {
 				shell_to_stdout.opaque = Z_NULL;
 
 				if (inflateInit(&shell_to_stdout) < 0) {
-					fprintf(stderr, "Error during inflateInit.\r\n");
+					fprintf(stderr, "Error during inflateInit. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				/* End: Compression stuff */
@@ -153,12 +162,12 @@ int main(int argc, char* argv[]) {
 	struct hostent *server;
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
-		fprintf(stderr, "Error opening socket.\r\n");
+		fprintf(stderr, "Error opening socket. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	server = gethostbyname("localhost");
 	if (server == NULL) {
-		fprintf(stderr, "Error, no such host.\r\n");
+		fprintf(stderr, "Error, no such host. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	memset((char*) &serv_addr, 0, sizeof(serv_addr));
@@ -166,7 +175,7 @@ int main(int argc, char* argv[]) {
 	memcpy((char*) &serv_addr.sin_addr.s_addr, (char*) server->h_addr, server->h_length);
 	serv_addr.sin_port = htons(portValue);
 	if (connect(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0) {
-		fprintf(stderr, "Error connecting.\r\n");
+		fprintf(stderr, "Error connecting. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	/* End: Set up socket connection */
@@ -180,7 +189,7 @@ int main(int argc, char* argv[]) {
 	if (log) {
 		log_fd = creat(logString, 0666);
 		if (log_fd < 0) {
-			fprintf(stderr, "Error creating log file.\r\n");
+			fprintf(stderr, "Error creating log file. %s\r\n", strerror(errno));
 			exit(1);
 		}
 	}
@@ -197,7 +206,7 @@ int main(int argc, char* argv[]) {
 	while(1) {
 		int p = poll(pfds, 2, -1);
 		if(p < 0) {
-			fprintf(stderr, "Error during poll.\r\n");
+			fprintf(stderr, "Error during poll. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		if (p == 0) {
@@ -213,7 +222,7 @@ int main(int argc, char* argv[]) {
 			memset(buffer, 0, sizeof(char) * 2048);
 			bytes_read = read(STDIN_FILENO, &buffer, 2048);
 			if (bytes_read < 0) {
-				fprintf(stderr, "Error during read.\r\n");
+				fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 				exit(1);
 			}
 
@@ -221,20 +230,20 @@ int main(int argc, char* argv[]) {
 			if (log) {
 				char message[256];
 				if (sprintf(message, "SENT %d bytes: ", bytes_read) < 0) {
-					fprintf(stderr, "Error during sprintf.\r\n");
+					fprintf(stderr, "Error during sprintf. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				if (write(log_fd, message, strlen(message)) < 0) {
-					fprintf(stderr, "Error during write.\r\n");
+					fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				if (!compress) {
 					if (write(log_fd, buffer, bytes_read) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 					if (write(log_fd, &lf, 1) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}
@@ -245,13 +254,13 @@ int main(int argc, char* argv[]) {
 				if (buffer[i] == '\r' || buffer[i] == '\n') {
 					char* crlf = "\r\n";
 					if (write(1, crlf, 2) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}
 				else {
 					if (write(1, &buffer[i], 1) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}
@@ -273,16 +282,22 @@ int main(int argc, char* argv[]) {
 				stdin_to_shell.avail_out = 2048;
 				stdin_to_shell.next_out = (Bytef *) compress_buffer;
 				do {
-					deflate(&stdin_to_shell, Z_SYNC_FLUSH);
+					if (deflate(&stdin_to_shell, Z_SYNC_FLUSH) < 0) {
+						fprintf(stderr, "Error during deflate. %s\r\n", strerror(errno));
+						exit(1);
+					}
 				} while (stdin_to_shell.avail_in > 0);
-				write(sockfd, compress_buffer, 2048 - stdin_to_shell.avail_out);
+				if (write(sockfd, compress_buffer, 2048 - stdin_to_shell.avail_out) < 0) {
+					fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
+					exit(1);
+				}
 				if (log) {
 					if (write(log_fd, compress_buffer, 2048 - stdin_to_shell.avail_out) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 					if (write(log_fd, &lf, 1) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}
@@ -290,7 +305,7 @@ int main(int argc, char* argv[]) {
 			else {
 				for (int i = 0; i < bytes_read; i++) {
 					if (write(sockfd, buffer, bytes_read) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}
@@ -303,7 +318,7 @@ int main(int argc, char* argv[]) {
 			memset(buffer, 0, sizeof(char) * 2048);
 			bytes_read = read(sockfd, &buffer, 2048);
 			if (bytes_read < 0) {
-				fprintf(stderr, "Error during read.\r\n");
+				fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 				exit(1);
 			}
 			if (bytes_read == 0) {
@@ -314,19 +329,19 @@ int main(int argc, char* argv[]) {
 			if (log) {
 				char message[256];
 				if (sprintf(message, "RECEIVED %d bytes: ", bytes_read) < 0) {
-					fprintf(stderr, "Error during sprintf.\r\n");
+					fprintf(stderr, "Error during sprintf. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				if (write(log_fd, message, strlen(message)) < 0) {
-					fprintf(stderr, "Error during write.\r\n");
+					fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				if (write(log_fd, buffer, bytes_read) < 0) {
-					fprintf(stderr, "Error during write.\r\n");
+					fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				if (write(log_fd, &lf, 1) < 0) {
-					fprintf(stderr, "Error during write.\r\n");
+					fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 					exit(1);
 				}
 			}
@@ -345,7 +360,10 @@ int main(int argc, char* argv[]) {
 				shell_to_stdout.next_out = (Bytef *) buffer;
 
 				do {
-					inflate(&shell_to_stdout, Z_SYNC_FLUSH);
+					if (inflate(&shell_to_stdout, Z_SYNC_FLUSH) < 0) {
+						fprintf(stderr, "Error during inflate. %s\r\n", strerror(errno));
+						exit(1);
+					}
 				} while (shell_to_stdout.avail_in > 0);
 				new_bytes_read = 2048 - shell_to_stdout.avail_out;
 			}
@@ -355,13 +373,13 @@ int main(int argc, char* argv[]) {
 				if (buffer[i] == '\r' || buffer[i] == '\n') {
 					char* crlf = "\r\n";
 					if (write(1, crlf, 2) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}
 				else {
 					if (write(1, &buffer[i], 1) < 0) {
-						fprintf(stderr, "Error during write.\r\n");
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 						exit(1);
 					}
 				}

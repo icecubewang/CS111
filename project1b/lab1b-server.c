@@ -39,7 +39,7 @@ void sighandler(int sig) {
 	if (sig == SIGPIPE) {
 		char *errmsg = "Error: Caught SIGPIPE with signal number. \r\n";
 		if (write(2, errmsg, strlen(errmsg)) < 0) {
-			fprintf(stderr, "Error during write.\r\n");
+			fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		_exit(0);
@@ -57,20 +57,20 @@ void reset(void) {
 		int bytes_read = 0;
 		bytes_read = read(pipe_in[0], &buffer, 2048);
 		if (bytes_read < 0) {
-			fprintf(stderr, "Error during read.\r\n");
+			fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		for (int i = 0; i < bytes_read; i++) {
 			if (buffer[i] == '\n') {
 				char* crlf = "\r\n";
 				if (write(1, crlf, 2) < 0) {
-					fprintf(stderr, "Error during read.\r\n");
+					fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 					exit(1);
 				}
 			}
 			else {
 				if (write(1, &buffer[i], 1) < 0) {
-					fprintf(stderr, "Error during read.\r\n");
+					fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 					exit(1);
 				}
 			}
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
 				port = true;
 				portValue = atoi(optarg);
 				if (portValue <= 2048 || portValue >= 66535) {
-					fprintf(stderr, "Port numbers should be between 2048 and 65535.\n");
+					fprintf(stderr, "Port numbers should be between 2048 and 65535.\r\n");
 					exit(1);
 				}
 				if (debug) {
@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
 				shell_to_client.opaque = Z_NULL;
 
 				if (deflateInit(&shell_to_client, Z_DEFAULT_COMPRESSION) < 0) {
-					fprintf(stderr, "Error during deflateInit.\r\n");
+					fprintf(stderr, "Error during deflateInit. %s\r\n", strerror(errno));
 					exit(1);
 				}
 
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
 				client_to_shell.opaque = Z_NULL;
 
 				if (inflateInit(&client_to_shell) < 0) {
-					fprintf(stderr, "Error during inflateInit.\r\n");
+					fprintf(stderr, "Error during inflateInit. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				/* End: Compression stuff */
@@ -172,7 +172,7 @@ int main(int argc, char* argv[]) {
 	struct sockaddr_in serv_addr, cli_addr;
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
-		fprintf(stderr, "Error opending socket.\n");
+		fprintf(stderr, "Error opending socket. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	memset((char*) &serv_addr, 0, sizeof(serv_addr));
@@ -180,14 +180,14 @@ int main(int argc, char* argv[]) {
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
 	serv_addr.sin_port = htons(portValue);
 	if (bind(sockfd, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0) {
-		fprintf(stderr, "Error on binding.\n");
+		fprintf(stderr, "Error on binding. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	listen(sockfd, 1);
 	clilen = sizeof(cli_addr);
 	newsockfd = accept(sockfd, (struct sockaddr*) &cli_addr, &clilen);
 	if (newsockfd < 0) {
-		fprintf(stderr, "Error on accept.\n");
+		fprintf(stderr, "Error on accept. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	if (debug) printf("Connected.\r\n");
@@ -195,7 +195,7 @@ int main(int argc, char* argv[]) {
 
 	/* Start: Pipe construction */
 	if (pipe(pipe_in) == -1 || (pipe(pipe_out) == -1)) {
-		fprintf(stderr, "Error building pipes.\n");
+		fprintf(stderr, "Error building pipes. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	/* End: Pipe construction */
@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
 	/* Start: Fork a child process */
 	pid = fork();
 	if (pid == -1) {
-		fprintf(stderr, "Error during fork.\n");
+		fprintf(stderr, "Error during fork. %s\r\n", strerror(errno));
 		exit(1);
 	}
 	/* End: Fork a child process */
@@ -212,11 +212,11 @@ int main(int argc, char* argv[]) {
 	else if (pid == 0) {
 		/* Start: Pipe handling in child process */
 		if (close(pipe_in[0]) < 0) {
-			fprintf(stderr, "Error closing pipe.\n");
+			fprintf(stderr, "Error closing pipe. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		if (close(pipe_out[1]) < 0) {
-			fprintf(stderr, "Error closing pipe.\n");
+			fprintf(stderr, "Error closing pipe. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		if (dup2(pipe_out[0], STDIN_FILENO) < 0) {
@@ -232,11 +232,11 @@ int main(int argc, char* argv[]) {
 			exit(1);
 		}
 		if (close(pipe_in[1]) < 0) {
-			fprintf(stderr, "Error closing pipe.\n");
+			fprintf(stderr, "Error closing pipe. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		if (close(pipe_out[0]) < 0) {
-			fprintf(stderr, "Error closing pipe.\n");
+			fprintf(stderr, "Error closing pipe. %s\r\n", strerror(errno));
 			exit(1);
 		}
 		/* End: Pipe handling in child process */
@@ -278,7 +278,7 @@ int main(int argc, char* argv[]) {
 		while(1) {
 			int p = poll(pfds, 2, -1);
 			if (p < 0) {
-				fprintf(stderr, "Error during poll.\n");
+				fprintf(stderr, "Error during poll. %s\r\n", strerror(errno));
 				exit(1);
 			}
 			if (p == 0) {
@@ -292,7 +292,7 @@ int main(int argc, char* argv[]) {
 			if (pfds[0].revents & POLLIN) {
 				bytes_read = read(newsockfd, &buffer, 2048);
 				if (bytes_read < 0) {
-					fprintf(stderr, "Error during read.\n");
+					fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 					exit(1);
 				}
 
@@ -308,7 +308,10 @@ int main(int argc, char* argv[]) {
 					client_to_shell.avail_out = 2048;
 					client_to_shell.next_out = (Bytef *) buffer;
 					do {
-						inflate(&client_to_shell, Z_SYNC_FLUSH);
+						if (inflate(&client_to_shell, Z_SYNC_FLUSH) < 0) {
+							fprintf(stderr, "Error during inflate. %s\r\n", strerror(errno));
+							exit(1);
+						}
 					} while (client_to_shell.avail_in > 0);
 					new_bytes_read = 2048 - client_to_shell.avail_out;
 				}
@@ -316,31 +319,31 @@ int main(int argc, char* argv[]) {
 				for (int i = 0; i < new_bytes_read; i++) {
 					if (buffer[i] == '\004') {
 						if (close(pipe_out[1]) < 0) {
-							fprintf(stderr, "Error during write.\n");
+							fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 							exit(1);
 						}
 						exit(0);
 					}
 					else if (buffer[i] == '\003') {
 						if (kill(pid, SIGINT) < 0) {
-							fprintf(stderr, "Error during kill.\n");
+							fprintf(stderr, "Error during kill. %s\r\n", strerror(errno));
 							exit(1);
 						}
 						if (write(pipe_out[1], "\n", 1) < 0) {
-							fprintf(stderr, "Error during write.\n");
+							fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 							exit(1);
 						}
 					}
 					else if (buffer[i] == '\r' || buffer[i] == '\n') {
 						char lf = '\n';
 						if (write(pipe_out[1], &lf, 1) < 0) {
-							fprintf(stderr, "Error during write.\n");
+							fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 							exit(1);
 						}
 					}
 					else {
 						if (write(pipe_out[1], &buffer[i], 1) < 0) {
-							fprintf(stderr, "Error during write.\n");
+							fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 							exit(1);
 						}
 					}
@@ -352,7 +355,7 @@ int main(int argc, char* argv[]) {
 			if (pfds[1].revents & POLLIN) {
 				bytes_read = read(pipe_in[0], &buffer, 2048);
 				if (bytes_read < 0) {
-					fprintf(stderr, "Error during read.\n");
+					fprintf(stderr, "Error during read. %s\r\n", strerror(errno));
 					exit(1);
 				}
 
@@ -365,14 +368,20 @@ int main(int argc, char* argv[]) {
 					shell_to_client.avail_out = 2048;
 					shell_to_client.next_out = (Bytef *) compress_buffer;
 					do {
-						deflate(&shell_to_client, Z_SYNC_FLUSH);
+						if (deflate(&shell_to_client, Z_SYNC_FLUSH) < 0) {
+							fprintf(stderr, "Error during deflate. %s\r\n", strerror(errno));
+							exit(1);
+						}
 					} while (shell_to_client.avail_in > 0);
-					write(newsockfd, compress_buffer, 2048 - shell_to_client.avail_out);
+					if (write(newsockfd, compress_buffer, 2048 - shell_to_client.avail_out) < 0) {
+						fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
+						exit(1);
+					}
 				}
 				else {
 					for (int i = 0; i < bytes_read; i++) {
 						if (write(newsockfd, &buffer[i], 1) < 0) {
-							fprintf(stderr, "Error during write.\n");
+							fprintf(stderr, "Error during write. %s\r\n", strerror(errno));
 							exit(1);
 						}
 					}
@@ -383,14 +392,14 @@ int main(int argc, char* argv[]) {
 			/* Start: POLLHUP & POLLERR case */
 			if ((pfds[0].revents & POLLHUP) || (pfds[0].revents & POLLERR)) {
 				if (close(pipe_out[1]) < 0) {
-					fprintf(stderr, "Error closing pipe.\n");
+					fprintf(stderr, "Error closing pipe. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				exit(0);
 			}
 			if ((pfds[1].revents & POLLHUP) || (pfds[1].revents & POLLERR)) {
 				if (close(pipe_out[1]) < 0) {
-					fprintf(stderr, "Error closing pipe.\n");
+					fprintf(stderr, "Error closing pipe. %s\r\n", strerror(errno));
 					exit(1);
 				}
 				exit(0);
