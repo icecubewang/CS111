@@ -228,13 +228,15 @@ int main(int argc, char* argv[]) {
 					fprintf(stderr, "Error during write.\r\n");
 					exit(1);
 				}
-				if (write(log_fd, buffer, bytes_read) < 0) {
-					fprintf(stderr, "Error during write.\r\n");
-					exit(1);
-				}
-				if (write(log_fd, &lf, 1) < 0) {
-					fprintf(stderr, "Error during write.\r\n");
-					exit(1);
+				if (!compress) {
+					if (write(log_fd, buffer, bytes_read) < 0) {
+						fprintf(stderr, "Error during write.\r\n");
+						exit(1);
+					}
+					if (write(log_fd, &lf, 1) < 0) {
+						fprintf(stderr, "Error during write.\r\n");
+						exit(1);
+					}
 				}
 			}
 
@@ -274,6 +276,16 @@ int main(int argc, char* argv[]) {
 					deflate(&stdin_to_shell, Z_SYNC_FLUSH);
 				} while (stdin_to_shell.avail_in > 0);
 				write(sockfd, compress_buffer, 2048 - stdin_to_shell.avail_out);
+				if (log) {
+					if (write(log_fd, compress_buffer, 2048 - stdin_to_shell.avail_out) < 0) {
+						fprintf(stderr, "Error during write.\r\n");
+						exit(1);
+					}
+					if (write(log_fd, &lf, 1) < 0) {
+						fprintf(stderr, "Error during write.\r\n");
+						exit(1);
+					}
+				}
 			}
 			else {
 				for (int i = 0; i < bytes_read; i++) {
@@ -286,7 +298,6 @@ int main(int argc, char* argv[]) {
 		}
 		/* End: Send input from keyboard to socket & echo to display */
 
-		//if (debug) printf("before polling 2...\r\n");
 		/* Start: Read input from the socket and print to display */
 		if (pfds[1].revents & POLLIN) {
 			memset(buffer, 0, sizeof(char) * 2048);
@@ -294,6 +305,9 @@ int main(int argc, char* argv[]) {
 			if (bytes_read < 0) {
 				fprintf(stderr, "Error during read.\r\n");
 				exit(1);
+			}
+			if (bytes_read == 0) {
+				exit(0);
 			}
 
 			/* Write to logfile */
@@ -338,9 +352,6 @@ int main(int argc, char* argv[]) {
 
 			/* Write to STDOUT (screen) + translate NL into CR NL */
 			for (int i = 0; i < new_bytes_read; i++) {
-				// if (buffer[i] == '\003' || buffer[i] == '\004') {
-				// 	exit(1);
-				// }
 				if (buffer[i] == '\r' || buffer[i] == '\n') {
 					char* crlf = "\r\n";
 					if (write(1, crlf, 2) < 0) {

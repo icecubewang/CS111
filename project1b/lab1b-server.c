@@ -1,3 +1,9 @@
+/*
+NAME: Feilan Wang
+EMAIL: wangfeilan@hotmail.com
+ID: 104796844
+*/
+
 /* SERVER */
 #define _POSIX_SOURCE
 #include <stdio.h>
@@ -31,8 +37,11 @@ z_stream client_to_shell;
 /* Signal handler */
 void sighandler(int sig) {
 	if (sig == SIGPIPE) {
-		char *errmsg = "Error: Caught SIGPIPE with swignal number. \r\n";
-		write(2, errmsg, strlen(errmsg));
+		char *errmsg = "Error: Caught SIGPIPE with signal number. \r\n";
+		if (write(2, errmsg, strlen(errmsg)) < 0) {
+			fprintf(stderr, "Error during write.\r\n");
+			exit(1);
+		}
 		_exit(0);
 	}
 }
