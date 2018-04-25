@@ -1,6 +1,6 @@
 #NAME: Feilan Wang
 #EMAIL: wangfeilan@hotmail.com
-#ID: 104796844
+#ID: XXXXXXXXX
 
 CC = gcc
 CFLAGS = -Wall -Wextra -lz -g -std=c99
@@ -14,7 +14,7 @@ lab1b-server: lab1b-server.c
 	${CC} ${CFLAGS} -o $@ $^
 
 dist:
-	tar -cvzf lab1b-104796844.tar.gz lab1b-client.c lab1b-server.c Makefile README
+	tar -cvzf lab1b-XXXXXXXXX.tar.gz lab1b-client.c lab1b-server.c Makefile README
 
 clean:
-	-rm -f lab1b-104796844.tar.gz lab1b-client lab1b-server logfile
+	-rm -f lab1b-XXXXXXXXX.tar.gz lab1b-client lab1b-server logfile
