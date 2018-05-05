@@ -1,6 +1,6 @@
 NAME: Feilan Wang
 EMAIL: wangfeilan@hotmail.com
-ID: 104796844
+ID: 
 
 Description of the included files:
 lab1b-server.c AND lab1b-client.c - C source modules that compile cleanly with no errors or warnings. The program has a client process, a server process, and a shell process. The first two are connected via TCP connection, and the last two are connected via pipes.
