@@ -18,7 +18,8 @@ int opt_sync = 0;
 int opt_m = 0;
 int opt_s = 0;
 int opt_c = 0;
-pthread_mutex_t lock;
+pthread_mutex_t lock_mutex;
+int lock_testAndSet = 0;
 
 /* Check return value function */
 void check_return_value(int ret, int errnum) {
@@ -31,22 +32,53 @@ void check_return_value(int ret, int errnum) {
 /* Add function */
 void add(long long *pointer, long long value) {
 	long long sum = *pointer + value;
-	if (opt_yield)
-		sched_yield();
+	if (opt_yield) sched_yield();
 	*pointer = sum;
 }
 
 /* Aggregated add function */
 void *addfunction(void *pointer) {
-	if (opt_m) pthread_mutex_lock(&lock);
 	long long * counter = (long long *) pointer;
-	for (int i = 0; i < noOfIterations; i++) {
-		add(counter, 1);
+	if (!opt_s && !opt_c) {
+		if (opt_m) pthread_mutex_lock(&lock_mutex);
+		for (int i = 0; i < noOfIterations; i++) {
+			add(counter, 1);
+		}
+		for (int i = 0; i < noOfIterations; i++) {
+			add(counter, -1);
+		}
+		if (opt_m) pthread_mutex_unlock(&lock_mutex);
 	}
-	for (int i = 0; i < noOfIterations; i++) {
-		add(counter, -1);
+	else if (opt_s) {
+		while (__sync_lock_test_and_set(&lock_testAndSet, 1));
+		for (int i = 0; i < noOfIterations; i++) {
+			add(counter, 1);
+		}
+		for (int i = 0; i < noOfIterations; i++) {
+			add(counter, -1);
+		}
+		__sync_lock_release(&lock_testAndSet);
 	}
-	if (opt_m) pthread_mutex_unlock(&lock);
+	else if (opt_c) {
+		for (int i = 0; i < noOfIterations; i++) {
+			long long old, new;
+			do {
+				old = *(long long *) pointer;
+				new = old + 1;
+				if (opt_yield) sched_yield();
+			}
+			while (__sync_val_compare_and_swap((long long *)pointer, old, new) != old);
+		}
+		for (int i = 0; i < noOfIterations; i++) {
+			long long old, new;
+			do {
+				old = *(long long *) pointer; 
+				new = old - 1;
+				if (opt_yield) sched_yield();
+			}
+			while (__sync_val_compare_and_swap((long long *)pointer, old, new) != old);
+		}
+	}
 }
 
 int main(int argc, char *argv[]) {
@@ -103,7 +135,7 @@ int main(int argc, char *argv[]) {
 	long long counter = 0;
 	int ret;
 	if (opt_m) {
-		ret = pthread_mutex_init(&lock, NULL);
+		ret = pthread_mutex_init(&lock_mutex, NULL);
 		int errnum = errno;
 		check_return_value(ret, errnum);
 	}
@@ -141,6 +173,6 @@ int main(int argc, char *argv[]) {
 	int errnum = errno;
 	check_return_value(ret, errnum);
 
-	pthread_mutex_destroy(&lock);
+	pthread_mutex_destroy(&lock_mutex);
 	exit(0);
 }
