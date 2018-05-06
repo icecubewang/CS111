@@ -12,7 +12,13 @@
 /* Global variables */
 int noOfThreads = 1;
 int noOfIterations = 1;
+char begin[20];
 int opt_yield = 0;
+int opt_sync = 0;
+int opt_m = 0;
+int opt_s = 0;
+int opt_c = 0;
+pthread_mutex_t lock;
 
 /* Check return value function */
 void check_return_value(int ret, int errnum) {
@@ -32,6 +38,7 @@ void add(long long *pointer, long long value) {
 
 /* Aggregated add function */
 void *addfunction(void *pointer) {
+	if (opt_m) pthread_mutex_lock(&lock);
 	long long * counter = (long long *) pointer;
 	for (int i = 0; i < noOfIterations; i++) {
 		add(counter, 1);
@@ -39,15 +46,18 @@ void *addfunction(void *pointer) {
 	for (int i = 0; i < noOfIterations; i++) {
 		add(counter, -1);
 	}
+	if (opt_m) pthread_mutex_unlock(&lock);
 }
 
 int main(int argc, char *argv[]) {
 	/* Parse arguments */
+	strcpy(begin, "add-");
 	int c;
 	struct option long_options[] = {
 		{"threads", required_argument, 0, 't'},
 		{"iterations", required_argument, 0, 'i'},
 		{"yield", no_argument, 0, 'y'},
+		{"sync", required_argument, 0, 's'},
 		{0, 0, 0, 0}
 	};
 	int option_index = 0;
@@ -61,14 +71,42 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'y':
 				opt_yield = 1;
+				strcat(begin, "yield-");
+				break;
+			case 's':
+				opt_sync = 1;
+				if (*optarg == *("m")) {
+					opt_m = 1;
+					strcat(begin, "m");
+				}
+				else if (*optarg == *("s")) {
+					opt_s = 1;
+					strcat(begin, "s");
+				}
+				else if (*optarg == *("c")) {
+					opt_c = 1;
+					strcat(begin, "c");
+				}
+				else {
+					fprintf(stderr, "Usage: ./lab2_add --threads=[INT] --iterations=[INT] --yield --sync=[m||s||c]\n");
+					exit(1);
+				}
 				break;
 			default:
-				fprintf(stderr, "Usage: ./lab2_add --threads=[number] --iterations=[number]\n");
+				fprintf(stderr, "Usage: ./lab2_add --threads=[INT] --iterations=[INT] --yield --sync=[m||s||c]\n");
 				exit(1);
 		}
 	}
+	if (!opt_sync) strcat(begin, "none");
 
+	/* Initialization */
 	long long counter = 0;
+	int ret;
+	if (opt_m) {
+		ret = pthread_mutex_init(&lock, NULL);
+		int errnum = errno;
+		check_return_value(ret, errnum);
+	}
 
 	/* Get starting time */
 	struct timespec start, end;
@@ -98,19 +136,11 @@ int main(int argc, char *argv[]) {
 	int noOfOps = noOfThreads * noOfIterations * 2;
 	int timePerOps = elapsedTime / noOfOps;
 	char msg[1000];
-	printf("%d\n", counter);
-	char* begin;
-	if (opt_yield) {
-		begin = "add-yield";
-	}
-	else {
-		begin = "add-none";
-	}
 	sprintf(msg, "%s,%d,%d,%d,%d,%d,%d\n", begin, noOfThreads, noOfIterations, noOfOps, elapsedTime, timePerOps, counter);
-	int ret;
 	ret = write(STDOUT_FILENO, msg, strlen(msg));
 	int errnum = errno;
 	check_return_value(ret, errnum);
 
+	pthread_mutex_destroy(&lock);
 	exit(0);
 }
