@@ -1,4 +1,7 @@
+#ifndef SORTEDLIST_H
+#define SORTEDLIST_H
 #include "SortedList.h"
+#endif
 #include <sched.h>
 #include <stdlib.h>
 #include <unistd.h>

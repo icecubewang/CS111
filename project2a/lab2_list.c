@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <stdbool.h>
+#include <signal.h>
 #include <errno.h>
 #include <time.h>		/* for clock_gettime */
 #include <pthread.h>
@@ -27,6 +28,17 @@ char syncopts[5];
 SortedList_t list;
 SortedListElement_t* elements;
 int intarr[100];
+pthread_mutex_t lock_mutex;
+int lock_testAndSet = 0;
+
+/* Signal Handler for Segmentation Fault */
+void sighandler(int signum) {
+	if (signum == 11) {
+		//printf("sighandler\n");
+		fprintf(stderr, "SegFault: Corrupted List. Error message: %s\n", strerror(errno));
+		exit(2);
+	}
+}
 
 /* Corrupted List error message */
 void corrupted_msg() {
@@ -46,17 +58,29 @@ void check_return_value(int ret, int errnum) {
 void *listfunction(void *pointer) {
 	int * index = (int *) pointer;
 	//Insert #ofIterations of elements into the list
+	if (sync_m) pthread_mutex_lock(&lock_mutex);
+	if (sync_s) while (__sync_lock_test_and_set(&lock_testAndSet, 1));
 	for (int i = 0; i < noOfIterations; i++) {
 		int location = (*index) * noOfIterations + i;
 		//printf("%d: %d\n", pthread_self(), location);
 		SortedList_insert(&list, &elements[location]);
 	}
+	if (sync_s) __sync_lock_release(&lock_testAndSet);
+	if (sync_m) pthread_mutex_unlock(&lock_mutex);
+
 	//Get the list length
+	if (sync_m) pthread_mutex_lock(&lock_mutex);
+	if (sync_s) while (__sync_lock_test_and_set(&lock_testAndSet, 1));
 	int length = SortedList_length(&list);
+	if (sync_s) __sync_lock_release(&lock_testAndSet);
+	if (sync_m) pthread_mutex_unlock(&lock_mutex);
 	if (length <= 0) {
 		corrupted_msg();
 	}
+
 	//Looks up and deletes each of the keys it had previously inserted
+	if (sync_m) pthread_mutex_lock(&lock_mutex);
+	if (sync_s) while (__sync_lock_test_and_set(&lock_testAndSet, 1));
 	for (int i = 0; i < noOfIterations; i++) {
 		int location = (*index) * noOfIterations + i;
 		SortedListElement_t* delete = SortedList_lookup(&list, elements[location].key);
@@ -66,9 +90,14 @@ void *listfunction(void *pointer) {
 			if (ret == 1) corrupted_msg();
 		}
 	}
+	if (sync_s) __sync_lock_release(&lock_testAndSet);
+	if (sync_m) pthread_mutex_unlock(&lock_mutex);
 }
 
 int main(int argc, char *argv[]) {
+	/* Signal handler */
+	signal(SIGSEGV, sighandler);
+
 	/* Parse arguments */
 	int c;
 	struct option long_options[] = {
@@ -79,6 +108,7 @@ int main(int argc, char *argv[]) {
 		{0, 0, 0, 0}
 	};
 	int option_index = 0;
+	int yield_len;
 	while ((c = getopt_long(argc, argv, ":t:i:y:s", long_options, &option_index)) != -1) {
 		switch(c) {
 			case 't':
@@ -88,43 +118,29 @@ int main(int argc, char *argv[]) {
 				noOfIterations = atoi(optarg);
 				break;
 			case 'y':
-				opt_yield = 1;
-				if (*optarg == *("i")) {
-					yield_i = 1;
-					strcpy(yieldopts, "i");
-				}
-				else if (*optarg == *("d")) {
-					yield_d = 1;
-					strcpy(yieldopts, "d");
-				}
-				else if (*optarg == *("l")) {
-					yield_l = 1;
-					strcpy(yieldopts, "l");
-				}
-				else if (*optarg == *("id")) {
-					yield_i = 1;
-					yield_d = 1;
-					strcpy(yieldopts, "id");
-				}
-				else if (*optarg == *("il")) {
-					yield_i = 1;
-					yield_l = 1;
-					strcpy(yieldopts, "il");
-				}
-				else if (*optarg == *("dl")) {
-					yield_d = 1;
-					yield_l = 1;
-					strcpy(yieldopts, "dl");
-				}
-				else if (*optarg == *("idl")) {
-					yield_i = 1;
-					yield_d = 1;
-					yield_l = 1;
-					strcpy(yieldopts, "idl");
-				}
-				else {
-					fprintf(stderr, "Usage: ./lab2_list --threads=[INT] --iterations=[INT] --yield=[idl]\n");
-					exit(1);
+				yield_len = strlen(optarg);
+				for (int i = 0; i < yield_len; i++) {
+					char c = *(optarg+i);
+					switch(c) {
+						case 'i':
+							opt_yield += 1;
+							yield_i = 1;
+							strcpy(yieldopts, "i");
+							break;
+						case 'd':
+							opt_yield += 2;
+							yield_d = 1;
+							strcpy(yieldopts, "d");
+							break;
+						case 'l':
+							opt_yield += 4;
+							yield_l = 1;
+							strcpy(yieldopts, "l");
+							break;
+						default:
+							fprintf(stderr, "Usage: ./lab2_list --threads=[INT] --iterations=[INT] --yield=[idl] --sync=[ms]\n");
+							exit(1);
+					}
 				}
 				break;
 			case 's':
@@ -136,8 +152,9 @@ int main(int argc, char *argv[]) {
 					sync_m = 1;
 					strcpy(syncopts, "m");
 				}
+				break;
 			default:
-				fprintf(stderr, "Usage: ./lab2_list --threads=[INT] --iterations=[INT] --yield=[idl]\n");
+				fprintf(stderr, "Usage: ./lab2_list --threads=[INT] --iterations=[INT] --yield=[idl] --sync=[ms]\n");
 				exit(1);
 		}
 	}
@@ -149,6 +166,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Initialization */
+	if (sync_m) {
+		int ret;
+		ret = pthread_mutex_init(&lock_mutex, NULL);
+		int errnum = errno;
+		check_return_value(ret, errnum);
+	}
 	noTI = noOfThreads * noOfIterations;
 	elements = (SortedListElement_t *)malloc(sizeof(SortedListElement_t) * noTI);
 	if (elements == 0) {
@@ -205,6 +228,8 @@ int main(int argc, char *argv[]) {
 	int ret = write(STDOUT_FILENO, msg, strlen(msg));
 	int errnum = errno;
 	check_return_value(ret, errnum);
+
+	pthread_mutex_destroy(&lock_mutex);
 
 	exit(0);
 }
