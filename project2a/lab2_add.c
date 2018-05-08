@@ -39,27 +39,24 @@ void add(long long *pointer, long long value) {
 /* Aggregated add function */
 void *addfunction(void *pointer) {
 	long long * counter = (long long *) pointer;
-	if (!opt_s && !opt_c) {
+	if (!opt_c) {
 		if (opt_m) pthread_mutex_lock(&lock_mutex);
+		if (opt_s) while (__sync_lock_test_and_set(&lock_testAndSet, 1));
 		for (int i = 0; i < noOfIterations; i++) {
 			add(counter, 1);
 		}
+		if (opt_s) __sync_lock_release(&lock_testAndSet);
+		if (opt_m) pthread_mutex_unlock(&lock_mutex);
+
+		if (opt_m) pthread_mutex_lock(&lock_mutex);
+		if (opt_s) while (__sync_lock_test_and_set(&lock_testAndSet, 1));
 		for (int i = 0; i < noOfIterations; i++) {
 			add(counter, -1);
 		}
+		if (opt_s) __sync_lock_release(&lock_testAndSet);
 		if (opt_m) pthread_mutex_unlock(&lock_mutex);
 	}
-	else if (opt_s) {
-		while (__sync_lock_test_and_set(&lock_testAndSet, 1));
-		for (int i = 0; i < noOfIterations; i++) {
-			add(counter, 1);
-		}
-		for (int i = 0; i < noOfIterations; i++) {
-			add(counter, -1);
-		}
-		__sync_lock_release(&lock_testAndSet);
-	}
-	else if (opt_c) {
+	else {
 		for (int i = 0; i < noOfIterations; i++) {
 			long long old, new;
 			do {
@@ -93,7 +90,7 @@ int main(int argc, char *argv[]) {
 		{0, 0, 0, 0}
 	};
 	int option_index = 0;
-	while ((c = getopt_long(argc, argv, ":t:i", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, ":t:iy:s", long_options, &option_index)) != -1) {
 		switch(c) {
 			case 't':
 				noOfThreads = atoi(optarg);
@@ -120,12 +117,12 @@ int main(int argc, char *argv[]) {
 					strcat(begin, "c");
 				}
 				else {
-					fprintf(stderr, "Usage: ./lab2_add --threads=[INT] --iterations=[INT] --yield --sync=[m||s||c]\n");
+					fprintf(stderr, "Usage: ./lab2_add --threads=[INT] --iterations=[INT] --yield --sync=[msc]\n");
 					exit(1);
 				}
 				break;
 			default:
-				fprintf(stderr, "Usage: ./lab2_add --threads=[INT] --iterations=[INT] --yield --sync=[m||s||c]\n");
+				fprintf(stderr, "Usage: ./lab2_add --threads=[INT] --iterations=[INT] --yield --sync=[msc]\n");
 				exit(1);
 		}
 	}
