@@ -92,6 +92,7 @@ void *listfunction(void *pointer) {
 	}
 	if (sync_s) __sync_lock_release(&lock_testAndSet);
 	if (sync_m) pthread_mutex_unlock(&lock_mutex);
+	return;
 }
 
 int main(int argc, char *argv[]) {
@@ -224,7 +225,7 @@ int main(int argc, char *argv[]) {
 
 	char msg[1000];
 
-	sprintf(msg, "list-%s-%s,%d,%d,%d,%d,%d,%d\n", yieldopts, syncopts, noOfThreads, noOfIterations, 1,noOfOps, elapsedTime, timePerOps);
+	sprintf(msg, "list-%s-%s,%d,%d,%d,%d,%d,%d\n", yieldopts, syncopts, noOfThreads, noOfIterations, 1,noOfOps, (int)elapsedTime, timePerOps);
 	int ret = write(STDOUT_FILENO, msg, strlen(msg));
 	int errnum = errno;
 	check_return_value(ret, errnum);

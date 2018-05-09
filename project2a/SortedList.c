@@ -1,3 +1,7 @@
+//NAME: Feilan Wang
+//EMAIL: 104796844
+//ID: 104796844
+
 #ifndef SORTEDLIST_H
 #define SORTEDLIST_H
 #include "SortedList.h"
@@ -41,6 +45,7 @@ int SortedList_delete(SortedListElement_t *element) {
 	SortedListElement_t *pnext = element->next;
 	if (pprev == NULL) return 1; //corrupted
 	else {
+		if (opt_yield & DELETE_YIELD) sched_yield();
 		pprev->next = pnext;
 		p->prev = NULL;
 	}
@@ -56,6 +61,7 @@ SortedListElement_t *SortedList_lookup(SortedList_t *list, const char *key) {
 	SortedListElement_t *p = list;
 	while (p != NULL && p->next != NULL) {
 		p = p->next;
+		if (opt_yield & LOOKUP_YIELD) sched_yield();
 		if (*(p->key) == *(key)) {
 			return p;
 		}

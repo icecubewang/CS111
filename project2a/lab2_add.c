@@ -1,3 +1,7 @@
+//NAME: Feilan Wang
+//EMAIL: wangfeilan@hotmail.com
+//ID: 104796844
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -76,6 +80,7 @@ void *addfunction(void *pointer) {
 			while (__sync_val_compare_and_swap((long long *)pointer, old, new) != old);
 		}
 	}
+	return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -165,7 +170,7 @@ int main(int argc, char *argv[]) {
 	int noOfOps = noOfThreads * noOfIterations * 2;
 	int timePerOps = elapsedTime / noOfOps;
 	char msg[1000];
-	sprintf(msg, "%s,%d,%d,%d,%d,%d,%d\n", begin, noOfThreads, noOfIterations, noOfOps, elapsedTime, timePerOps, counter);
+	sprintf(msg, "%s,%d,%d,%d,%d,%d,%d\n", begin, noOfThreads, noOfIterations, noOfOps, (int)elapsedTime, timePerOps, (int)counter);
 	ret = write(STDOUT_FILENO, msg, strlen(msg));
 	int errnum = errno;
 	check_return_value(ret, errnum);
