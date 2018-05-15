@@ -1,6 +1,6 @@
 //NAME: Feilan Wang
-//EMAIL: 104796844
-//ID: 104796844
+//EMAIL: wangfeilan@hotmail.com
+//ID: 
 
 #ifndef SORTEDLIST_H
 #define SORTEDLIST_H

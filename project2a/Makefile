@@ -1,6 +1,6 @@
 #NAME: Feilan Wang
 #EMAIL: wangfeilan@hotmail.com
-#ID: 104796844
+#ID: 
 
 CC = gcc
 CFLAGS = -O1 -Wall -Wextra -pthread -g
@@ -25,4 +25,4 @@ dist: all tests graphs
 	tar -cvzf lab2a-104796844.tar.gz *.c *.h Makefile *.png README gnuplotGenerate.sh *.gp *.csv
 
 clean:
-	-rm -f lab2a-104796844.tar.gz lab2_add lab2_list *.o 
+	-rm -f lab2a-xxxxxxxxx.tar.gz lab2_add lab2_list *.o 

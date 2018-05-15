@@ -1,6 +1,6 @@
 #NAME: Feilan Wang
 #EMAIL: wangfeilan@hotmail.com
-#ID: 104796844
+#ID: 
 
 #!/bin/bash
 rm -f lab2_add.csv lab2_list.csv
