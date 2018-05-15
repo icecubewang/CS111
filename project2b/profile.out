@@ -1,0 +1,252 @@
+Total: 222 samples
+     183  82.4%  82.4%      222 100.0% listfunctionB
+      23  10.4%  92.8%       23  10.4% SortedList_lookup
+      16   7.2% 100.0%       16   7.2% SortedList_insert
+       0   0.0% 100.0%      222 100.0% __clone
+       0   0.0% 100.0%      222 100.0% start_thread
+ROUTINE ====================== listfunctionB in /u/eng/class/classfei/Desktop/CS111/project2b/lab2_list.c
+   183    222 Total samples (flat / cumulative)
+     .      .   59: 		exit(1);
+     .      .   60: 	}
+     .      .   61: }
+     .      .   62: 
+     .      .   63: /* Aggregated list function for spliting list implimentation */
+---
+     .      .   64: void *listfunctionB(void *pointer) {
+     .      .   65: 	int * index = (int *) pointer;
+     .      .   66: 
+     .      .   67: 	//Insert
+     .      .   68: 	for (int i = 0; i < noOfIterations; i++) {
+     .      .   69: 
+     .      .   70: 		int location = (*index) * noOfIterations + i;
+     .      .   71: 
+     .      .   72: 		//hash function for the key to be inserted
+     .      .   73: 		//hash function should be key % noOfLists
+     .      .   74: 		int whichlist = ((int)*(elements[location].key)) % noOfLists;
+     .      .   75: 
+     .      .   76: 		//Insert into the corresponding list
+     .      .   77: 		SortedList_t *thislist = &list[whichlist];
+     .      .   78: 		if (sync_m) {
+     .      .   79: 			struct timespec lock_start, lock_end;
+     .      .   80: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .   81: 			pthread_mutex_lock(&lock_mutex[whichlist]);
+     .      .   82: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .   83: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .   84: 		}
+     .      .   85: 		if (sync_s) {
+     .      .   86: 			struct timespec lock_start, lock_end;
+     .      .   87: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+   120    120   88: 			while (__sync_lock_test_and_set(&lock_testAndSet[whichlist], 1));
+     .      .   89: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .   90: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .   91: 		}
+     .      .   92: 	
+     .     16   93: 		SortedList_insert(thislist, &elements[location]);
+     .      .   94: 		if (sync_s) {
+     .      .   95: 			__sync_lock_release(&lock_testAndSet[whichlist]);
+     .      .   96: 		}
+     .      .   97: 		if (sync_m) pthread_mutex_unlock(&lock_mutex[whichlist]);
+     .      .   98: 
+     .      .   99: 	}
+     .      .  100: 
+     .      .  101: 	//Length
+     .      .  102: 	int length = 0;
+     .      .  103: 	for (int i = 0; i < noOfLists; i++) {
+     .      .  104: 
+     .      .  105: 		if (sync_m) {
+     .      .  106: 			struct timespec lock_start, lock_end;
+     .      .  107: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .  108: 			pthread_mutex_lock(&lock_mutex[i]);
+     .      .  109: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  110: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  111: 		}
+     .      .  112: 		if (sync_s) {
+     .      .  113: 			struct timespec lock_start, lock_end;
+     .      .  114: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .  115: 			while (__sync_lock_test_and_set(&lock_testAndSet[i], 1));
+     .      .  116: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  117: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  118: 		}
+     .      .  119: 	}
+     .      .  120: 	for (int i = 0; i < noOfLists; i++) {
+     .      .  121: 		length += SortedList_length(&list[i]);
+     .      .  122: 	}
+     .      .  123: 	for (int i = 0; i < noOfLists; i++) {
+     .      .  124: 		if (sync_s) {
+     .      .  125: 			__sync_lock_release(&lock_testAndSet[i]);
+     .      .  126: 		}
+     .      .  127: 		if (sync_m) {
+     .      .  128: 			pthread_mutex_unlock(&lock_mutex[i]);
+     .      .  129: 		}
+     .      .  130: 	}
+     .      .  131: 	if (length <= 0) corrupted_msg();
+     .      .  132: 
+     .      .  133: 	//Look up and Delete
+     .      .  134: 	for (int i = 0; i < noOfIterations; i++) {
+     .      .  135: 
+     .      .  136: 		int location = (*index) * noOfIterations + i;
+     .      .  137: 
+     .      .  138: 		//hash function for the key to be inserted
+     .      .  139: 		//hash function should be key % noOfLists
+     .      .  140: 		int whichlist = ((int)*(elements[location].key)) % noOfLists;
+     .      .  141: 
+     .      .  142: 		//Look up in the corresponding list
+     .      .  143: 		SortedList_t *thislist = &list[whichlist];
+     .      .  144: 
+     .      .  145: 		if (sync_m) {
+     .      .  146: 			struct timespec lock_start, lock_end;
+     .      .  147: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .  148: 			pthread_mutex_lock(&lock_mutex[whichlist]);
+     .      .  149: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  150: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  151: 		}
+     .      .  152: 		if (sync_s) {
+     .      .  153: 			struct timespec lock_start, lock_end;
+     .      .  154: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+    63     63  155: 			while (__sync_lock_test_and_set(&lock_testAndSet[whichlist], 1));
+     .      .  156: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  157: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  158: 		}
+     .      .  159: 
+     .     23  160: 		SortedListElement_t* delete = SortedList_lookup(thislist, elements[location].key);
+     .      .  161: 		if (delete == NULL) corrupted_msg();
+     .      .  162: 		else {
+     .      .  163: 			int ret = SortedList_delete(delete);
+     .      .  164: 			if (ret == 1) corrupted_msg();
+     .      .  165: 		}
+     .      .  166: 		if (sync_s) __sync_lock_release(&lock_testAndSet[whichlist]);
+     .      .  167: 		if (sync_m) pthread_mutex_unlock(&lock_mutex[whichlist]);
+     .      .  168: 
+     .      .  169: 	}
+     .      .  170: 
+     .      .  171: 	return NULL;
+     .      .  172: }
+---
+     .      .  173: 
+     .      .  174: int main(int argc, char *argv[]) {
+     .      .  175: 	/* Signal handler */
+     .      .  176: 	signal(SIGSEGV, sighandler);
+     .      .  177: 
+ROUTINE ====================== listfunctionB in /u/eng/class/classfei/Desktop/CS111/project2b/lab2_list.c
+   183    222 Total samples (flat / cumulative)
+     .      .   59: 		exit(1);
+     .      .   60: 	}
+     .      .   61: }
+     .      .   62: 
+     .      .   63: /* Aggregated list function for spliting list implimentation */
+---
+     .      .   64: void *listfunctionB(void *pointer) {
+     .      .   65: 	int * index = (int *) pointer;
+     .      .   66: 
+     .      .   67: 	//Insert
+     .      .   68: 	for (int i = 0; i < noOfIterations; i++) {
+     .      .   69: 
+     .      .   70: 		int location = (*index) * noOfIterations + i;
+     .      .   71: 
+     .      .   72: 		//hash function for the key to be inserted
+     .      .   73: 		//hash function should be key % noOfLists
+     .      .   74: 		int whichlist = ((int)*(elements[location].key)) % noOfLists;
+     .      .   75: 
+     .      .   76: 		//Insert into the corresponding list
+     .      .   77: 		SortedList_t *thislist = &list[whichlist];
+     .      .   78: 		if (sync_m) {
+     .      .   79: 			struct timespec lock_start, lock_end;
+     .      .   80: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .   81: 			pthread_mutex_lock(&lock_mutex[whichlist]);
+     .      .   82: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .   83: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .   84: 		}
+     .      .   85: 		if (sync_s) {
+     .      .   86: 			struct timespec lock_start, lock_end;
+     .      .   87: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+   120    120   88: 			while (__sync_lock_test_and_set(&lock_testAndSet[whichlist], 1));
+     .      .   89: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .   90: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .   91: 		}
+     .      .   92: 	
+     .     16   93: 		SortedList_insert(thislist, &elements[location]);
+     .      .   94: 		if (sync_s) {
+     .      .   95: 			__sync_lock_release(&lock_testAndSet[whichlist]);
+     .      .   96: 		}
+     .      .   97: 		if (sync_m) pthread_mutex_unlock(&lock_mutex[whichlist]);
+     .      .   98: 
+     .      .   99: 	}
+     .      .  100: 
+     .      .  101: 	//Length
+     .      .  102: 	int length = 0;
+     .      .  103: 	for (int i = 0; i < noOfLists; i++) {
+     .      .  104: 
+     .      .  105: 		if (sync_m) {
+     .      .  106: 			struct timespec lock_start, lock_end;
+     .      .  107: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .  108: 			pthread_mutex_lock(&lock_mutex[i]);
+     .      .  109: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  110: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  111: 		}
+     .      .  112: 		if (sync_s) {
+     .      .  113: 			struct timespec lock_start, lock_end;
+     .      .  114: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .  115: 			while (__sync_lock_test_and_set(&lock_testAndSet[i], 1));
+     .      .  116: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  117: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  118: 		}
+     .      .  119: 	}
+     .      .  120: 	for (int i = 0; i < noOfLists; i++) {
+     .      .  121: 		length += SortedList_length(&list[i]);
+     .      .  122: 	}
+     .      .  123: 	for (int i = 0; i < noOfLists; i++) {
+     .      .  124: 		if (sync_s) {
+     .      .  125: 			__sync_lock_release(&lock_testAndSet[i]);
+     .      .  126: 		}
+     .      .  127: 		if (sync_m) {
+     .      .  128: 			pthread_mutex_unlock(&lock_mutex[i]);
+     .      .  129: 		}
+     .      .  130: 	}
+     .      .  131: 	if (length <= 0) corrupted_msg();
+     .      .  132: 
+     .      .  133: 	//Look up and Delete
+     .      .  134: 	for (int i = 0; i < noOfIterations; i++) {
+     .      .  135: 
+     .      .  136: 		int location = (*index) * noOfIterations + i;
+     .      .  137: 
+     .      .  138: 		//hash function for the key to be inserted
+     .      .  139: 		//hash function should be key % noOfLists
+     .      .  140: 		int whichlist = ((int)*(elements[location].key)) % noOfLists;
+     .      .  141: 
+     .      .  142: 		//Look up in the corresponding list
+     .      .  143: 		SortedList_t *thislist = &list[whichlist];
+     .      .  144: 
+     .      .  145: 		if (sync_m) {
+     .      .  146: 			struct timespec lock_start, lock_end;
+     .      .  147: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+     .      .  148: 			pthread_mutex_lock(&lock_mutex[whichlist]);
+     .      .  149: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  150: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  151: 		}
+     .      .  152: 		if (sync_s) {
+     .      .  153: 			struct timespec lock_start, lock_end;
+     .      .  154: 			clock_gettime(CLOCK_MONOTONIC, &lock_start);
+    63     63  155: 			while (__sync_lock_test_and_set(&lock_testAndSet[whichlist], 1));
+     .      .  156: 			clock_gettime(CLOCK_MONOTONIC, &lock_end);
+     .      .  157: 			total_lock_waiting_time[*index] += 1000000000 * (lock_end.tv_sec - lock_start.tv_sec) + (lock_end.tv_nsec - lock_start.tv_nsec);
+     .      .  158: 		}
+     .      .  159: 
+     .     23  160: 		SortedListElement_t* delete = SortedList_lookup(thislist, elements[location].key);
+     .      .  161: 		if (delete == NULL) corrupted_msg();
+     .      .  162: 		else {
+     .      .  163: 			int ret = SortedList_delete(delete);
+     .      .  164: 			if (ret == 1) corrupted_msg();
+     .      .  165: 		}
+     .      .  166: 		if (sync_s) __sync_lock_release(&lock_testAndSet[whichlist]);
+     .      .  167: 		if (sync_m) pthread_mutex_unlock(&lock_mutex[whichlist]);
+     .      .  168: 
+     .      .  169: 	}
+     .      .  170: 
+     .      .  171: 	return NULL;
+     .      .  172: }
+---
+     .      .  173: 
+     .      .  174: int main(int argc, char *argv[]) {
+     .      .  175: 	/* Signal handler */
+     .      .  176: 	signal(SIGSEGV, sighandler);
+     .      .  177: 
