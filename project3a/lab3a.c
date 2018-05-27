@@ -128,6 +128,14 @@ typedef struct {
 g_data* myGroups;
 
 void group() {
+	/* Open csv file */
+	FILE* file = fopen("summary.csv", "a");	//"a": append mode
+	if (file == NULL) {
+		fprintf(stderr, "Error: fopen in group().\n");
+		free(myGroups);
+		exit(PROCESSING_ERRORS);
+	}
+
 	/* Note: "In the image we give you, there will be only a single group." */
 
 	/* Calculate groups count */
@@ -137,6 +145,7 @@ void group() {
 	myGroups = malloc(sizeof(g_data) * mySuperBlock.s_groups_count);
 	if (myGroups == NULL) {
 		fprintf(stderr, "Error: malloc in group().\n");
+		fclose(file);
 		exit(PROCESSING_ERRORS);
 	}
 
@@ -147,6 +156,7 @@ void group() {
 	if (ret < 0) {
 		fprintf(stderr, "Error: pread in group().\n");
 		free(myGroups);
+		fclose(file);
 		exit(PROCESSING_ERRORS);
 	}
 
@@ -178,14 +188,6 @@ void group() {
 		/* first block of inodes : just read from data array */
 		myGroups[i].g_first_block_of_inodes = group_descriptor[i].bg_inode_table;
 
-		/* Open csv file */
-		FILE* file = fopen("summary.csv", "a");	//"a": append mode
-		if (file == NULL) {
-			fprintf(stderr, "Error: fopen in group().\n");
-			free(myGroups);
-			exit(PROCESSING_ERRORS);
-		}
-
 		/* Write to file */
 		fprintf(file, "%s,%u,%u,%u,%u,%u,%u,%u,%u\n", 
 				"GROUP", 
@@ -200,6 +202,65 @@ void group() {
 
 		/* Clean up */
 		fclose(file);
+	}
+}
+
+/* Free block entires (for each group) */
+/*
+1. BFREE
+2. number of the free block (decimal)
+*/
+
+void free_block_entries() {
+	/* Open csv file */
+	FILE* file = fopen("summary.csv", "a");	//"a": append mode
+	if (file == NULL) {
+		fprintf(stderr, "Error: fopen in free_block_entries().\n");
+		free(myGroups);
+		exit(PROCESSING_ERRORS);
+	}
+
+	/* Iteration to read each group's free blocks */
+	int i;
+	__u32 curr_number_of_blocks = 0;
+	for (i = 0; i < mySuperBlock.s_groups_count; i++) {
+		__u32 first_free_block_bitmap = myGroups[i].g_first_free_block_bitmap;
+		__u32 number_of_blocks = myGroups[i].g_blocks_count;
+
+		//Create a buffer and Read data into buffer
+		__u8* bitmap = malloc(mySuperBlock.s_block_size);
+		int ret;
+		ret = pread(fd, bitmap, mySuperBlock.s_block_size, first_free_block_bitmap * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in free_block_entires().\n");
+			fclose(file);
+			free(myGroups);
+			free(bitmap);
+			exit(PROCESSING_ERRORS);
+		}
+
+		//Loop through the bitmap block to check every bit
+		int j;
+		for (j = 0; j < mySuperBlock.s_block_size; j++) {
+			__u8 mask = 1;
+			int k;
+			for (k = 0; k < 8; k++) {
+				if (curr_number_of_blocks >= number_of_blocks) {
+					free(bitmap);
+					return;
+				}
+				else {
+					curr_number_of_blocks += 1;
+					//free = 0, in-use = 1
+					__u8 currBit = bitmap[j];
+					if ((currBit & mask) == 0) {	//free bit
+						fprintf(file, "%s,%u\n", "BFREE", curr_number_of_blocks + mySuperBlock.s_blocks_per_group * i);
+					}
+					mask <<= 1;
+				}
+			}
+		}
+		free(bitmap);
 	}
 }
 
@@ -220,6 +281,7 @@ int main(int argc, char* argv[]) {
 
 	superblock();
 	group();
+	free_block_entries();
 
 	/* Clean up */
 	free(myGroups);
