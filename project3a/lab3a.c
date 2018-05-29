@@ -9,26 +9,15 @@
 #include <sys/stat.h>
 #include <stdint.h>
 #include <time.h>
+#include <stdbool.h>
 
 #include "ext2_fs.h"
 
 #define ANALYSIS_SUCCESSFUL 0
-#define PROCESSING_ERRORSS       1
+#define PROCESSING_ERRORSS  1
 #define PROCESSING_ERRORS	2
 
 int fd = -1;
-
-/* Superblock */
-/*
-1. SUPERBLOCK
-2. total number of blocks (decimal)
-3. total number of i-nodes (decimal)
-4. block size (in bytes, decimal)
-5. i-node size (in bytes, decimal)
-6. blocks per group (decimal)
-7. i-nodes per group (decimal)
-8. first non-reserved i-node (decimal)
-*/
 
 typedef struct ext2_super_block sb;
 
@@ -43,6 +32,153 @@ typedef struct {
 	__u32 	s_groups_count;				/* Groups count */
 } sb_data;
 sb_data mySuperBlock;
+
+
+typedef struct ext2_group_desc g;
+
+typedef struct {
+	__u32 g_blocks_count;				/* Blocks count */
+	__u32 g_inodes_count;				/* Inodes count */
+	__u32 g_free_blocks_count;			/* Free blocks */
+	__u32 g_free_inodes_count;			/* Free inodes */
+	__u32 g_first_free_block_bitmap;	/* Frist free block bitmap */
+	__u32 g_first_free_inode_bitmap;	/* Frist free inode bitmap */
+	__u32 g_first_block_of_inodes;		/* Frist block of inodes */
+} g_data;
+g_data* myGroups;
+
+
+__u32 block_number(int* level, __u32* block, __u32 global_block_number) {
+	__u32 local_block_number_0 = 0;
+	__u32 local_block_number_1 = 0;
+	__u32 local_block_number_2 = 0;
+	__u32 local_block_number_3 = 0;	//at most triple indirect
+
+	__u32 offset_0 = 12;
+	__u32 offset_1 = offset_0 + mySuperBlock.s_block_size;
+	__u32 offset_2 = offset_1 + mySuperBlock.s_block_size * mySuperBlock.s_block_size;
+	__u32 offset_3 = offset_2 + mySuperBlock.s_block_size * mySuperBlock.s_block_size * mySuperBlock.s_block_size;
+
+	//Determine level
+	if (global_block_number > offset_2 && global_block_number <= offset_3) *level = 3;
+	else if (global_block_number > offset_1 && global_block_number <= offset_2) *level = 2;
+	else if (global_block_number > offset_0 && global_block_number <= offset_1) *level = 1;
+	else if (global_block_number > 0 && global_block_number <= offset_0) *level = 0;
+	else {
+		fprintf(stderr, "Error: wrong global_block_number.\n");
+		return (__u32)0;
+	}
+
+	//case: direct
+	if (*level == 0) {
+		local_block_number_0 = global_block_number;
+		return block[local_block_number_0 - 1];
+	}
+
+	//case: indirect
+	if (*level == 1) {
+		__u32* indirect_block;
+		indirect_block = malloc(mySuperBlock.s_block_size);
+		local_block_number_1 = global_block_number - offset_0;
+		local_block_number_0 = offset_0 + 1;
+		int ret;
+		ret = pread(fd, indirect_block, mySuperBlock.s_block_size, block[local_block_number_0 - 1] * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in block_number().\n");
+			free(myGroups);
+			free(indirect_block);
+			exit(PROCESSING_ERRORS);
+		}
+		return indirect_block[local_block_number_1 - 1];
+	}
+
+	//case: double_indirect
+	if (*level == 2) {
+		__u32* double_indirect_block;
+		double_indirect_block = malloc(mySuperBlock.s_block_size);
+		__u32* indirect_block;
+		indirect_block = malloc(mySuperBlock.s_block_size);
+		local_block_number_0 = offset_0 + 2;
+		local_block_number_1 = (global_block_number - offset_1 - 1) / mySuperBlock.s_block_size + 1;
+		local_block_number_2 = (global_block_number - offset_1 - 1) % mySuperBlock.s_block_size + 1;
+		int ret;
+		ret = pread(fd, indirect_block, mySuperBlock.s_block_size, block[local_block_number_0 - 1] * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in block_number().\n");
+			free(myGroups);
+			free(indirect_block);
+			free(double_indirect_block);
+			exit(PROCESSING_ERRORS);
+		}
+		ret = pread(fd, double_indirect_block, mySuperBlock.s_block_size, indirect_block[local_block_number_1 - 1] * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in block_number().\n");
+			free(myGroups);
+			free(indirect_block);
+			free(double_indirect_block);
+			exit(PROCESSING_ERRORS);
+		}
+		return double_indirect_block[local_block_number_2 - 1];
+	}
+
+	//case: triple-indirect
+	if (*level == 3) {
+		__u32* triple_indirect_block;
+		triple_indirect_block = malloc(mySuperBlock.s_block_size);
+		__u32* double_indirect_block;
+		double_indirect_block = malloc(mySuperBlock.s_block_size);
+		__u32* indirect_block;
+		indirect_block = malloc(mySuperBlock.s_block_size);
+		__u32 number_of_blocks = global_block_number - offset_2 - 1;
+		local_block_number_0 = offset_0 + 3;
+		local_block_number_1 = number_of_blocks / (mySuperBlock.s_block_size * mySuperBlock.s_block_size) + 1;
+		local_block_number_2 = number_of_blocks % (mySuperBlock.s_block_size * mySuperBlock.s_block_size) / mySuperBlock.s_block_size + 1;
+		local_block_number_3 = number_of_blocks % mySuperBlock.s_block_size + 1;
+		int ret;
+		ret = pread(fd, indirect_block, mySuperBlock.s_block_size, block[local_block_number_0 - 1] * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in block_number().\n");
+			free(myGroups);
+			free(indirect_block);
+			free(double_indirect_block);
+			free(triple_indirect_block);
+			exit(PROCESSING_ERRORS);
+		}
+		ret = pread(fd, double_indirect_block, mySuperBlock.s_block_size, block[local_block_number_1 - 2] * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in block_number().\n");
+			free(myGroups);
+			free(indirect_block);
+			free(double_indirect_block);
+			free(triple_indirect_block);
+			exit(PROCESSING_ERRORS);
+		}
+		ret = pread(fd, triple_indirect_block, mySuperBlock.s_block_size, block[local_block_number_2 - 1] * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in block_number().\n");
+			free(myGroups);
+			free(indirect_block);
+			free(double_indirect_block);
+			free(triple_indirect_block);
+			exit(PROCESSING_ERRORS);
+		}
+		return triple_indirect_block[local_block_number_3 - 1];
+	}
+	return (__u32)0;
+}
+
+
+/* Superblock */
+/*
+1. SUPERBLOCK
+2. total number of blocks (decimal)
+3. total number of i-nodes (decimal)
+4. block size (in bytes, decimal)
+5. i-node size (in bytes, decimal)
+6. blocks per group (decimal)
+7. i-nodes per group (decimal)
+8. first non-reserved i-node (decimal)
+*/
 
 void superblock() {
 	/* Create message buffer */
@@ -114,19 +250,6 @@ void superblock() {
 9. block number of first block of i-nodes in this group (decimal)
 */
 
-typedef struct ext2_group_desc g;
-
-typedef struct {
-	__u32 g_blocks_count;				/* Blocks count */
-	__u32 g_inodes_count;				/* Inodes count */
-	__u32 g_free_blocks_count;			/* Free blocks */
-	__u32 g_free_inodes_count;			/* Free inodes */
-	__u32 g_first_free_block_bitmap;	/* Frist free block bitmap */
-	__u32 g_first_free_inode_bitmap;	/* Frist free inode bitmap */
-	__u32 g_first_block_of_inodes;		/* Frist block of inodes */
-} g_data;
-g_data* myGroups;
-
 void group() {
 	/* Open csv file */
 	FILE* file = fopen("summary.csv", "a");	//"a": append mode
@@ -176,7 +299,6 @@ void group() {
 			myGroups[i].g_inodes_count = mySuperBlock.s_inodes_per_group;
 		}
 
-		/* 啊啊啊啊拿到offer了心情瞬间就好了压力也瞬间消失嘻嘻 */
 		/* free blocks count and free inodes count : just read from data array */
 		myGroups[i].g_free_blocks_count = group_descriptor[i].bg_free_blocks_count;
 		myGroups[i].g_free_inodes_count = group_descriptor[i].bg_free_inodes_count;
@@ -480,6 +602,137 @@ void inode() {
 	fclose(file);
 }
 
+/* Directory entries */
+/*
+1. DIRENT
+2. parent inode number (decimal) ... the I-node number of the directory that contains this entry
+3. logical byte offset (decimal) of this entry within the directory
+4. inode number of the referenced file (decimal)
+5. entry length (decimal)
+6. name length (decimal)
+7. name (string, surrounded by single-quotes). Don't worry about escaping, we promise there will be no signle-quotes or commas in any of the file names.
+*/
+
+void dirent() {
+	/* Open csv file */
+	FILE* file = fopen("summary.csv", "a");	//"a": append mode
+	if (file == NULL) {
+		fprintf(stderr, "Error: fopen in inode().\n");
+		free(myGroups);
+		exit(PROCESSING_ERRORSS);
+	}
+
+	/* Iteration to read each group's non-free inodes */
+	__u32 curr_number_of_inodes = 0;
+	int i;
+	for (i = 0; i < mySuperBlock.s_groups_count; i++) {
+		__u32 first_free_inode_bitmap = myGroups[i].g_first_free_inode_bitmap;
+		__u32 number_of_inodes = myGroups[i].g_inodes_count;
+		__u32 first_block_of_inodes = myGroups[i].g_first_block_of_inodes;
+
+		/* Create a buffer and Read data into buffer */
+		__u8* bitmap = malloc(mySuperBlock.s_block_size);
+		int ret;
+		ret = pread(fd, bitmap, mySuperBlock.s_block_size, first_free_inode_bitmap * mySuperBlock.s_block_size);
+		if (ret < 0) {
+			fprintf(stderr, "Error: pread in inode().\n");
+			fclose(file);
+			free(myGroups);
+			free(bitmap);
+			exit(PROCESSING_ERRORSS);
+		}
+
+		int j;
+		for (j = 0; j < mySuperBlock.s_inode_size / 8; j++) {
+			__u8 mask = 1;
+			int k;
+			for (k = 0; k < 8; k++) {
+				if (curr_number_of_inodes >= number_of_inodes) {
+					free(bitmap);
+					fclose(file);
+					return;
+				}
+				else {
+					curr_number_of_inodes += 1;
+					if ((bitmap[j] & mask) != 0) {	//in-use
+						struct ext2_inode curr_inode;
+						ret = pread(fd, &curr_inode, mySuperBlock.s_inode_size, first_block_of_inodes * mySuperBlock.s_block_size + mySuperBlock.s_inode_size * ((curr_number_of_inodes - 1) % mySuperBlock.s_inodes_per_group));
+						if (ret < 0) {
+							fprintf(stderr, "Error: pread in dirent().\n");
+							fclose(file);
+							free(myGroups);
+							free(bitmap);
+							exit(PROCESSING_ERRORSS);
+						}
+
+						/* Read data (only need mode & blocks) */
+						__u16 i_mode = curr_inode.i_mode;
+						__u32 i_block[EXT2_N_BLOCKS];
+						int l;
+						for (l = 0; l < EXT2_N_BLOCKS; l++) {
+							i_block[l] = curr_inode.i_block[l];
+						}
+
+						//Only handle EXT2_S_IFDIR	0x4000	directory
+						if (i_mode & 0x4000) {
+							int level = 0;
+							__u32 global_block_number = 1;
+							__u32 parent_inode_number = curr_number_of_inodes;
+							__u32 block_offset = block_number(&level, i_block, global_block_number) * mySuperBlock.s_block_size;
+							__u32 global_offset = 0;
+							__u32 local_offset = 0;
+
+							while(true) {
+								struct ext2_dir_entry curr_dirent;
+								if (local_offset >= mySuperBlock.s_block_size) {	//the last one
+									global_block_number += 1;
+									local_offset -= mySuperBlock.s_block_size;
+									block_offset = block_number(&level, i_block, global_block_number) * mySuperBlock.s_block_size;
+								}
+								
+								//read curr_dirent
+								ret = pread(fd, &curr_dirent, sizeof(struct ext2_dir_entry), block_offset+local_offset);
+								if (ret < 0) {
+									fprintf(stderr, "Error: pread in dirent.\n");
+									fclose(file);
+									free(myGroups);
+									free(bitmap);
+									exit(PROCESSING_ERRORSS);
+								}
+
+								//extract data from curr_dirent
+								__u32 referenced_inode_number = curr_dirent.inode;
+								if (!referenced_inode_number) break;
+								__u16 entry_length = curr_dirent.rec_len;
+								__u8 name_length = curr_dirent.name_len;
+								char name[255];
+								int t;
+								for (int t = 0; t < 255; t++) {
+									name[t] = curr_dirent.name[t];
+								}
+								fprintf(file, "%s,%u,%u,%u,%u,%u,'%s'\n", 
+										"DIRENT",
+										parent_inode_number,
+										global_offset,
+										referenced_inode_number,
+										entry_length,
+										name_length,
+										name);
+
+								//adjust offset
+								local_offset += entry_length;
+								global_offset += entry_length;
+							}
+						}
+					}
+					mask <<= 1;
+				}
+			}
+		}
+	}
+	fclose(file);
+}
+
 int main(int argc, char* argv[]) {
 	//Check arguments
 	if (argc != 2) {
@@ -500,6 +753,7 @@ int main(int argc, char* argv[]) {
 	free_block_entries();
 	free_inode_entries();
 	inode();
+	dirent();
 
 	/* Clean up */
 	free(myGroups);
