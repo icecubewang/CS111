@@ -1,0 +1,8 @@
+NAME: Feilan Wang
+EMAIL: wangfeilan@hotmail.com
+ID: 104796844
+SLIPDAYS: 2
+
+lab3a.c - a C source module written for ext2 file system analysis. 
+Makefile - build and run the deliverable program.
+README - this file.
