@@ -60,7 +60,7 @@ def parseArgument():
 	with open(sys.argv[1], "r") as f:
 		for line in f:
 			x = line.split(",")
-			if x[0] = "SUPERBLOCK":
+			if x[0] == "SUPERBLOCK":
 				totalNumberOfBlocks = int(x[1])
 				totalNumberOfInodes = int(x[2])
 				blockSize = int(x[3])
@@ -71,7 +71,7 @@ def parseArgument():
 				mySuperBlock = superBlockInfo(totalNumberOfBlocks, totalNumberOfInodes, blockSize, inodeSize, blocksPerGroup, inodesPerGroup, firstNonReservedInode)
 				initContainer()
 
-			elif x[0] = "GROUP":
+			elif x[0] == "GROUP":
 				groupNumber = int(x[1])
 				totalNumberOfBlocks = int(x[2])
 				totalNumberOfInodes = int(x[3])
@@ -81,28 +81,28 @@ def parseArgument():
 				freeInodeBitmap = int(x[7])
 				firstBlockOfInodes = int(x[8])
 
-			elif x[0] = "BFREE":
+			elif x[0] == "BFREE":
 				blockNumber = int(x[1])
 				blockDict_Isfree[blockNumber] = True	#true == free, false == not free
 
 
-			elif x[0] = "IFREE":
+			elif x[0] == "IFREE":
 				inodeNumber = int(x[1])
 				inodeDict_Isfree[inodeNumber] = True
 
-			elif x[0] = "INDIRECT":
+			elif x[0] == "INDIRECT":
 				blockNumber = int(x[5])
 				myBlock = blockInfo(blockNumber, int(x[1]), int(x[3]), int(x[2]))
 				if blockNumber not in blockDict_allcation:
 					blockDict_allcation[blockNumber] = set()
 				blockDict_allcation[blockNumber].add(myBlock)
 
-			elif x[0] = "INODE":
+			elif x[0] == "INODE":
 				inodeNumber = x[1]
 				inodeDict_allocated[inodeNumber] = True
 				inodeDict_linkCount[inodeNumber] = int(x[6])
 
-			elif x[0] = "DIRENT":
+			elif x[0] == "DIRENT":
 				inodeNumber = x[3]
 				if inodeNumber in inodeDict_ReferenceNumber.keys():
 					inodeDict_ReferenceNumber[inodeNumber] += 1
