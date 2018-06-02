@@ -17,6 +17,7 @@ inodeDict_linkCount = dict()
 inodeDict_realParent = dict()
 inodeDict_ReferenceNumber = dict()
 inodeDict_children = dict()
+inodeDict_name = dict()
 
 #container
 class superBlockInfo:
@@ -110,6 +111,7 @@ def parseArgument():
 					inodeDict_ReferenceNumber[inodeNumber] = 1
 
 				inodeDict_children[x[1]].append((int(x[6]), int(x[3])))
+				inodeDict_name[inodeNumber] = name
 
 				#TODO: Can a file have two real parent?
 				inodeDict_realParent[inodeNumber] = int(x[1])
@@ -123,6 +125,18 @@ def inodeAllocationAudit():
 		if not isAllocated and not isFree:
 			print("UNALLOCATED INODE " + inodeNumber + " NOT ON FREELIST\n")
 
+def directoryConsistencyAudit():
+	for inodeNumber in inodeDict_linkCount.keys():
+		linkCount = inodeDict_linkCount[inodeNumber]
+		referencedNumber = inodeDict_ReferenceNumber[inodeNumber]
+		if inodeNumber < 1 or inodeNumber > mySuperBlock.totalNumberOfInodes:
+			print("DIRECTORY INODE " + inodeDict_realParent(inodeNumber) + " NAME '" + inodeDict_name[inodeNumber] + "' INVALID INODE " + inodeNumber + "\n")
+		if inodeDict_Isfree[inodeNumber] and linkCount != 0:
+			print("DIRECTORY INODE " + inodeDict_realParent(inodeNumber) + " NAME '" + inodeDict_name[inodeNumber] + "' UNALLOCATED INODE " + inodeNumber + "\n")
+		if linkCount != referencedNumber:
+			print("INODE " + inodeNumber + " HAS " + referencedNumber + " LINKS BUT LINKCOUNT IS " + linkCount + "\n")
+
+
 def initContainer():
 	for num in range(0, mySuperBlock.totalNumberOfBlocks):
 		blockDictIsfree[num] = False
@@ -131,6 +145,7 @@ def initContainer():
 def main():
 	parseArgument()
 	inodeAllocationAudit()
+	directoryConsistencyAudit()
 
 
 if __name__ == "__main__":
