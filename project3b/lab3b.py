@@ -11,6 +11,7 @@ import sys
 blockDict_Isfree = dict()
 blockDict_allcation = dict()
 
+inodeDict_Isfree = dict()
 inodeDict_allocated = dict()
 inodeDict_linkCount = dict()
 inodeDict_realParent = dict()
@@ -113,6 +114,15 @@ def parseArgument():
 				#TODO: Can a file have two real parent?
 				inodeDict_realParent[inodeNumber] = int(x[1])
 
+def inodeAllocationAudit():
+	for inodeNumber in inodeDict_allocated.keys():
+		isAllocated = inodeDict_allocated[inodeNumber]
+		isFree = inodeDict_Isfree[inodeNumber]
+		if isAllocated and isFree:
+			print("ALLOCATED INODE " + inodeNumber + " ON FREELIST\n")
+		if not isAllocated and not isFree:
+			print("UNALLOCATED INODE " + inodeNumber + " NOT ON FREELIST\n")
+
 def initContainer():
 	for num in range(0, mySuperBlock.totalNumberOfBlocks):
 		blockDictIsfree[num] = False
@@ -120,6 +130,7 @@ def initContainer():
 
 def main():
 	parseArgument()
+	inodeAllocationAudit()
 
 
 if __name__ == "__main__":
