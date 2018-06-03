@@ -40,9 +40,10 @@ class groupInfo:
 		self.firstBlockOfInodes = firstBlockOfInodes
 
 class blockInfo:
-	def __init__(self, blockNumber, inodeNumber, offset, level):
+	def __init__(self, blockNumber, inodeNumber, block, offset, level):
 		self.blockNumber = blockNumber
 		self.inodeNumber = inodeNumber
+		self.block = block
 		self.offset = offset
 		self.level = level
 
@@ -91,15 +92,43 @@ def parseArgument():
 
 			elif x[0] = "INDIRECT":
 				blockNumber = int(x[5])
-				myBlock = blockInfo(blockNumber, int(x[1]), int(x[3]), int(x[2]))
+				myBlock = blockInfo(blockNumber, int(x[1]), "INDIRECT BLOCK",int(x[3]), int(x[2]))
 				if blockNumber not in blockDict_allcation:
 					blockDict_allcation[blockNumber] = set()
 				blockDict_allcation[blockNumber].add(myBlock)
 
 			elif x[0] = "INODE":
-				inodeNumber = x[1]
+				inodeNumber = int(x[1])
 				inodeDict_allocated[inodeNumber] = True
 				inodeDict_linkCount[inodeNumber] = int(x[6])
+
+				blockDict_allcation[inodeNumber] = []
+
+				for k in range(15)
+					blockNumber = int(x[12] + k)
+					level = 0
+					block = "BLOCK"
+					offset = k
+
+					if k == 12:
+						level = 1
+						block = "INDIRECT BLOCK"
+						offset = 12
+					elif k == 13:
+						level = 2
+						block = "DOUBLE INDIRECT BLOCK"
+						offset = 268
+					elif k == 14:
+						level = 3
+						block = "TRIPLE INDIRECT BLOCK"
+						offset = 65804
+
+					if blockNumber > 0:
+						myBlock = blockInfo(blockNumber, inodeNumber, block, offset, level)
+						if blockNumber not in blockDict_allcation:
+							blockDict_allcation[blockNumber] = set()
+						blockDict_allcation[blockNumber].add(myBlock)
+
 
 			elif x[0] = "DIRENT":
 				inodeNumber = x[3]
@@ -116,6 +145,10 @@ def parseArgument():
 def initContainer():
 	for num in range(0, mySuperBlock.totalNumberOfBlocks):
 		blockDictIsfree[num] = False
+
+def block_consistency_audits():
+	#scan all block pointers in the I-node
+
 
 
 def main():
