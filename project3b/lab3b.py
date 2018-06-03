@@ -164,13 +164,30 @@ def directoryConsistencyAudit():
 		if linkCount != referencedNumber:
 			print("INODE " + inodeNumber + " HAS " + referencedNumber + " LINKS BUT LINKCOUNT IS " + linkCount + "\n")
 
+def block_consistency_audits():
+	blockNumbers = blockDictIsfree.keys()
+	for k in blockNumbers #check allocated block on freelist
+		if k < mySuperBlock.firstNonReservedInode or mySuperBlock.totalNumberOfBlocks < k:
+			printf("ALLOCATED BLOCK " + k + " ON FREELIST")
+
+
+	blockNumbers = blockDict_allcation.keys()
+	for i in blockNumbers
+		# check invalid
+		if i < 0 or i >= mySuperBlock.totalNumberOfBlocks:
+			print("INVALUD" + list(blockDict_allcation[k])[0].block " " + list(blockDict_allcation[k])[0].blockNumbers +" IN INODE " + list(blockDict_allcation[k])[0].inodeNumber + " AT OFFSET " + list(blockDict_allcation[k])[0].offset + "\n")
+		elif i < mySuperBlock.firstNonReservedInode: #check reserved block
+			print("RESERVED " + list(blockDict_allcation[k])[0].block + " " + list(blockDict_allcation[k])[0].blockNumbers +" IN INODE " + list(blockDict_allcation[k])[0].inodeNumber + " AT OFFSET " + list(blockDict_allcation[k])[0].offset + "\n")
+		elif len(blockDict_allcation[k]) > 1: #duplicate
+			print("DUPLICATE" + list(blockDict_allcation[k])[0].block " " + list(blockDict_allcation[k])[0].blockNumbers +" IN INODE " + list(blockDict_allcation[k])[0].inodeNumber + " AT OFFSET " + list(blockDict_allcation[k])[0].offset + "\n")
+
+	# for every block
+	starting_block = 
 
 def initContainer():
 	for num in range(0, mySuperBlock.totalNumberOfBlocks):
 		blockDictIsfree[num] = False
 
-def block_consistency_audits():
-	#scan all block pointers in the I-node
 
 
 
