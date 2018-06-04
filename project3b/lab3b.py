@@ -17,7 +17,7 @@ inodeDict_Isfree = dict()		#initialize all to false
 inodeDict_allocated = dict()
 inodeDict_mode = dict()
 inodeDict_linkCount = dict()	#initialize all to 0
-inodeDict_realParent = dict()
+#inodeDict_realParent = {2: 2}
 inodeDict_ReferenceNumber = dict()
 inodeDict_children = dict()
 inodeDict_name = dict()
@@ -125,7 +125,7 @@ def parseArgument():
 						blockDict_allcation[blockNumber].add(myBlock)
 
 			elif x[0] == "DIRENT":
-				myDirent = direntInfo(x[1], x[3], x[6])
+				myDirent = direntInfo(x[1], x[3], x[6].rstrip('\n'))
 				direntEntries.add(myDirent)
 				inodeNumber = int(x[3])
 				inodeNumbers.add(inodeNumber)
@@ -142,9 +142,9 @@ def parseArgument():
 					inodeDict_children[x[1]].add(myChild)
 				if not inodeNumber in inodeDict_name.keys():
 					inodeDict_name[inodeNumber] = x[6]
-				if x[6].rstrip('\n') != "'..'" and x[6].rstrip('\n') != "'.'":
-					inodeDict_realParent[inodeNumber] = int(x[1])
-					print(str(inodeNumber) + "'S PARENT IS " + str(x[1]))
+				# if x[6] != "'..'" and x[6] != "'.'":
+				# 	inodeDict_realParent[inodeNumber] = int(x[1])
+				# 	#print(str(inodeNumber) + "'S PARENT IS " + str(x[1]))
 
 			elif x[0] == "INDIRECT":
 				blockNumber = int(x[5])
@@ -233,11 +233,8 @@ def directoryConsistencyAudits():
 
 		linkCount = 0
 		if inodeNumber in inodeDict_linkCount.keys():
-			#print(linkCount)
 			linkCount = inodeDict_linkCount[inodeNumber]
-			#print(linkCount)
 
-		#print(linkCount)
 		referenceNumber = 0
 		if inodeNumber in inodeDict_ReferenceNumber.keys():
 			referenceNumber = inodeDict_ReferenceNumber[inodeNumber]
@@ -246,27 +243,29 @@ def directoryConsistencyAudits():
 			print("INODE " + str(inodeNumber) + " HAS " + str(referenceNumber) + " LINKS BUT LINKCOUNT IS " + str(linkCount))
 			returnCode = 2
 
+	inodeDict_realParent = {2: 2}
+
 	for dirent in direntEntries:
 		parentInodeNumber = dirent.parentInodeNumber
-		inodeNumber = dirent.inodeNumber
-		name = dirent.name.rstrip('\n')
+		inodeNumber = int(dirent.inodeNumber)
+		name = dirent.name
+		if inodeNumber <= mySuperBlock.totalNumberOfInodes and inodeNumber in inodeDict_allocated.keys():
+			if dirent.name != "'.'" and dirent.name != "'..'":
+				inodeDict_realParent[inodeNumber] = parentInodeNumber
+
+	for dirent in direntEntries:
+		parentInodeNumber = int(dirent.parentInodeNumber)
+		inodeNumber = int(dirent.inodeNumber)
+		name = dirent.name
 		if name == "'.'":
 			if parentInodeNumber != inodeNumber:
 				print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " LINK TO INODE " + str(inodeNumber) + " SHOULD BE " + str(parentInodeNumber))
 				returnCode = 2
 		elif name == "'..'":
-			print("parent id: "+parentInodeNumber)
-			print("inode id: "+inodeNumber)
-			for key in inodeDict_realParent.keys():
-				print(key)
-			print("========")
-			comp = 0
-			if inodeNumber == 2 or parentInodeNumber == 2:
-				continue
-			if inodeNumber != inodeDict_realParent.get(parentInodeNumber, ):
-				print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " LINK TO INODE " + str(inodeNumber) + " SHOULD BE " + str(inodeDict_realParent.get(parentInodeNumber, )))
-				returnCode = 2
-
+			if parentInodeNumber in inodeDict_realParent.keys():
+				if inodeNumber != int(inodeDict_realParent[parentInodeNumber]):
+					print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " LINK TO INODE " + str(inodeNumber) + " SHOULD BE " + str(inodeDict_realParent[parentInodeNumber]))
+					returnCode = 2
 
 if __name__ == "__main__":
 	parseArgument()
