@@ -222,13 +222,26 @@ def inodeAllocationAudits():
 			returnCode = 2
 		
 def directoryConsistencyAudits():
-	for inodeNumber in inodeNumbers:
+	inodeDict_realParent = {2: 2}
+
+	for dirent in direntEntries:
+		parentInodeNumber = int(dirent.parentInodeNumber)
+		inodeNumber = int(dirent.inodeNumber)
+		name = dirent.name
+		if inodeNumber <= mySuperBlock.totalNumberOfInodes and inodeNumber in inodeDict_allocated.keys():
+			if dirent.name != "'.'" and dirent.name != "'..'":
+				inodeDict_realParent[inodeNumber] = parentInodeNumber
+
+	for dirent in direntEntries:
+		inodeNumber = int(dirent.inodeNumber)
+		parentInodeNumber = int(dirent.parentInodeNumber)
+		name = dirent.name
 		if inodeNumber < 1 or inodeNumber > mySuperBlock.totalNumberOfInodes:
-			print("DIRECTORY INODE " + str(inodeDict_realParent[inodeNumber]) + " NAME " + inodeDict_name[inodeNumber].rstrip('\n') + " INVALID INODE " + str(inodeNumber))
+			print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " INVALID INODE " + str(inodeNumber))
 			returnCode = 2
 
 		elif not inodeNumber in inodeDict_allocated.keys():
-			print("DIRECTORY INODE " + str(inodeDict_realParent[inodeNumber]) + " NAME " + inodeDict_name[inodeNumber].rstrip('\n') + " UNALLOCATED INODE " + str(inodeNumber))
+			print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " UNALLOCATED INODE " + str(inodeNumber))
 			returnCode = 2
 
 		linkCount = 0
@@ -242,16 +255,6 @@ def directoryConsistencyAudits():
 		if inodeDict_mode > 0 and linkCount != referenceNumber:
 			print("INODE " + str(inodeNumber) + " HAS " + str(referenceNumber) + " LINKS BUT LINKCOUNT IS " + str(linkCount))
 			returnCode = 2
-
-	inodeDict_realParent = {2: 2}
-
-	for dirent in direntEntries:
-		parentInodeNumber = dirent.parentInodeNumber
-		inodeNumber = int(dirent.inodeNumber)
-		name = dirent.name
-		if inodeNumber <= mySuperBlock.totalNumberOfInodes and inodeNumber in inodeDict_allocated.keys():
-			if dirent.name != "'.'" and dirent.name != "'..'":
-				inodeDict_realParent[inodeNumber] = parentInodeNumber
 
 	for dirent in direntEntries:
 		parentInodeNumber = int(dirent.parentInodeNumber)
