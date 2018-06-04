@@ -1,3 +1,9 @@
-#NAME: ,Kana Yabuno
-#EMAIL: ,kana0111@g.ucla.edu
-#ID: ,404849285
+#NAME:Feilan Wang,Kana Yabuno
+#EMAIL:wangfeilan@hotmail.com,kana0111@g.ucla.edu
+#ID:104796844,404849285
+
+Description of each of the included files:
+1. lab3b.py - one source module that analyze .csv file containing EXT2 file image data
+2. Makefile - build and run the diliverable program
+3. README - this file
+

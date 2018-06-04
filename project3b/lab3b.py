@@ -17,7 +17,6 @@ inodeDict_Isfree = dict()		#initialize all to false
 inodeDict_allocated = dict()
 inodeDict_mode = dict()
 inodeDict_linkCount = dict()	#initialize all to 0
-#inodeDict_realParent = {2: 2}
 inodeDict_ReferenceNumber = dict()
 inodeDict_children = dict()
 inodeDict_name = dict()
@@ -25,6 +24,7 @@ inodeDict_name = dict()
 inodeNumbers = set()
 blockNumbers = set()
 direntEntries = set()
+inodeEntries = set()
 
 #containers
 class superBlockInfo:
@@ -61,6 +61,12 @@ class blockInfo:
 		self.offset = offset
 		self.level = level
 
+class inodeInfo:
+	def __init__(self, inodeNumber, mode, linkCount):
+		self.inodeNumber = inodeNumber
+		self.mode = mode
+		self.linkCount = linkCount
+
 class direntInfo:
 	def __init__(self, parentInodeNumber, inodeNumber, name):
 		self.parentInodeNumber = parentInodeNumber
@@ -96,6 +102,8 @@ def parseArgument():
 
 			elif x[0] == "INODE":
 				inodeNumber = int(x[1])
+				myInode = inodeInfo(inodeNumber, int(x[3]), int(x[6]))
+				inodeEntries.add(myInode)
 				inodeNumbers.add(inodeNumber)
 				if not inodeNumber in inodeDict_allocated.keys():
 					inodeDict_allocated[inodeNumber] = True
@@ -245,16 +253,16 @@ def directoryConsistencyAudits():
 			print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " UNALLOCATED INODE " + str(inodeNumber))
 			returnCode = 2
 
-	for inodeNumber in inodeNumbers:
+	for myInode in inodeEntries:
+		inodeNumber = myInode.inodeNumber
+
 		linkCount = 0
 		if inodeNumber in inodeDict_linkCount.keys():
 			linkCount = inodeDict_linkCount[inodeNumber]
-			#print("linc" + str(linkCount))
 
 		referenceNumber = 0
 		if inodeNumber in inodeDict_ReferenceNumber.keys():
 			referenceNumber = inodeDict_ReferenceNumber[inodeNumber]
-			#print("ref" + str(referenceNumber))
 
 		if not inodeNumber < 1 and not inodeNumber > mySuperBlock.totalNumberOfInodes:
 			if inodeDict_mode > 0 and linkCount != referenceNumber:
