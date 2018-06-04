@@ -233,6 +233,7 @@ def directoryConsistencyAudits():
 				inodeDict_realParent[inodeNumber] = parentInodeNumber
 
 	for dirent in direntEntries:
+		#print(dirent.inodeNumber)
 		inodeNumber = int(dirent.inodeNumber)
 		parentInodeNumber = int(dirent.parentInodeNumber)
 		name = dirent.name
@@ -244,17 +245,21 @@ def directoryConsistencyAudits():
 			print("DIRECTORY INODE " + str(parentInodeNumber) + " NAME " + name + " UNALLOCATED INODE " + str(inodeNumber))
 			returnCode = 2
 
+	for inodeNumber in inodeNumbers:
 		linkCount = 0
 		if inodeNumber in inodeDict_linkCount.keys():
 			linkCount = inodeDict_linkCount[inodeNumber]
+			#print("linc" + str(linkCount))
 
 		referenceNumber = 0
 		if inodeNumber in inodeDict_ReferenceNumber.keys():
 			referenceNumber = inodeDict_ReferenceNumber[inodeNumber]
+			#print("ref" + str(referenceNumber))
 
-		if inodeDict_mode > 0 and linkCount != referenceNumber:
-			print("INODE " + str(inodeNumber) + " HAS " + str(referenceNumber) + " LINKS BUT LINKCOUNT IS " + str(linkCount))
-			returnCode = 2
+		if not inodeNumber < 1 and not inodeNumber > mySuperBlock.totalNumberOfInodes:
+			if inodeDict_mode > 0 and linkCount != referenceNumber:
+				print("INODE " + str(inodeNumber) + " HAS " + str(referenceNumber) + " LINKS BUT LINKCOUNT IS " + str(linkCount))
+				returnCode = 2
 
 	for dirent in direntEntries:
 		parentInodeNumber = int(dirent.parentInodeNumber)
