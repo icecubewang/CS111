@@ -7,4 +7,6 @@ default:
 	chmod +x lab3b
 
 dist:
-	tar -cvzf lab3a-404849285.tar.gz lab3b.py Makefile README
+	tar -cvzf lab3b-404849285.tar.gz lab3b.py Makefile README
+clean:
+	rm -f lab3b-404849285.tar.gz lab3b
