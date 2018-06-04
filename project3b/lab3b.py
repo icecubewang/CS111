@@ -19,6 +19,9 @@ inodeDict_ReferenceNumber = dict()
 inodeDict_children = dict()
 inodeDict_name = dict()
 
+mySuperBlock = None
+myGroup = None
+
 #container
 class superBlockInfo:
 	def __init__(self, totalNumberOfBlocks, totalNumberOfInodes, blockSize, inodeSize, blocksPerGroup, inodesPerGroup, firstNonReservedInode):
@@ -70,6 +73,7 @@ def parseArgument():
 				blocksPerGroup = int(x[5])
 				inodesPerGroup = int(x[6])
 				firstNonReservedInode = int(x[7])
+				global mySuperBlock
 				mySuperBlock = superBlockInfo(totalNumberOfBlocks, totalNumberOfInodes, blockSize, inodeSize, blocksPerGroup, inodesPerGroup, firstNonReservedInode)
 				initContainer()
 
@@ -82,6 +86,8 @@ def parseArgument():
 				freeBlockBitmap = int(x[6])
 				freeInodeBitmap = int(x[7])
 				firstBlockOfInodes = int(x[8])
+				global myGroup
+				myGroup = groupInfo(groupNumber, totalNumberOfBlocks, totalNumberOfInodes, numberOfFreeBlocks, numberOfFreeInodes, freeInodeBitmap, freeInodeBitmap, firstBlockOfInodes)
 
 			elif x[0] == "BFREE":
 				blockNumber = int(x[1])
@@ -103,8 +109,6 @@ def parseArgument():
 				inodeNumber = int(x[1])
 				inodeDict_allocated[inodeNumber] = True
 				inodeDict_linkCount[inodeNumber] = int(x[6])
-
-				blockDict_allcation[inodeNumber] = []
 
 				for k in range(15)
 					blockNumber = int(x[12] + k)
@@ -165,14 +169,15 @@ def directoryConsistencyAudit():
 			print("INODE " + inodeNumber + " HAS " + referencedNumber + " LINKS BUT LINKCOUNT IS " + linkCount + "\n")
 
 def block_consistency_audits():
-	blockNumbers = blockDictIsfree.keys()
-	for k in blockNumbers #check allocated block on freelist
-		if k < mySuperBlock.firstNonReservedInode or mySuperBlock.totalNumberOfBlocks < k:
-			printf("ALLOCATED BLOCK " + k + " ON FREELIST")
-
+	blockNumbers = blockDictIsfree.keys() 
+	for k, v in blockNumbers.items(): #check allocated block on freelist
+		if v and k in blockDict_allcation:
+			print("ALLOCATED " list(blockDict_allcation[k])[0].block + list(blockDict_allcation[k])[0].blockNumber + " ON FREELIST" + "\n")
+		#elif not v and not k in blockDict_allcation:
+		#	print("UNREFERENCED BLOCK" + list(blockDict_allcation[k])[0].block + list(blockDict_allcation[k])[0].blockNumber)
 
 	blockNumbers = blockDict_allcation.keys()
-	for i in blockNumbers
+	for i in blockNumbers:
 		# check invalid
 		if i < 0 or i >= mySuperBlock.totalNumberOfBlocks:
 			print("INVALUD" + list(blockDict_allcation[k])[0].block " " + list(blockDict_allcation[k])[0].blockNumbers +" IN INODE " + list(blockDict_allcation[k])[0].inodeNumber + " AT OFFSET " + list(blockDict_allcation[k])[0].offset + "\n")
@@ -181,8 +186,27 @@ def block_consistency_audits():
 		elif len(blockDict_allcation[k]) > 1: #duplicate
 			print("DUPLICATE" + list(blockDict_allcation[k])[0].block " " + list(blockDict_allcation[k])[0].blockNumbers +" IN INODE " + list(blockDict_allcation[k])[0].inodeNumber + " AT OFFSET " + list(blockDict_allcation[k])[0].offset + "\n")
 
-	# for every block
-	starting_block = 
+	# a number of group = total number of blocks/blocks per group
+	# number of block in each group = blocksPerGroup
+	# a last block in inodes = first block in inodes + 
+	# a = (inodes_size * inodes_per_group)
+	# b = size_of_block
+	# last block in inodes = first block in inodes + (a-1)//(b+1)
+
+	# scann all blocks
+	numberOfGroup = mySuperBlock.totalNumberOfBlocks / mySuperBlock.blocksPerGroup
+	blocksPerGroup = mySuperBlock.blocksPerGroup
+	a = (mySuperBlock.inodes_size * mySuperBlock.inodes_per_group)
+	b = mySuperBlock.blockSize
+	lastBlockInInodes = myGroup.firstBlockOfInodes + ((a - 1) // (b + 1))
+	for k in range(mySuperBlock.totalNumberOfBlocks, lastBlockInInodes):
+		if blockDict_Isfree[k]:
+			continue
+		elif k in blockDict_allcation.keys()
+			continue
+		else
+			print("UNREFERENCED BLOCK" + list(blockDict_allcation[k])[0].block + list(blockDict_allcation[k])[0].blockNumber)
+
 
 def initContainer():
 	for num in range(0, mySuperBlock.totalNumberOfBlocks):
@@ -195,7 +219,7 @@ def main():
 	parseArgument()
 	inodeAllocationAudit()
 	directoryConsistencyAudit()
-
+	block_consistency_audits()
 
 if __name__ == "__main__":
 	main()
